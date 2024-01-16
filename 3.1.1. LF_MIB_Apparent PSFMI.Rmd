@@ -1,0 +1,64 @@
+---
+title: "3.1.1. LF_MIB_Apparent PSFMI"
+author: "N. de Mul"
+date: "2023-11-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Scenario MI_Boot
+
+## Apparent model performance met PSFMI (automatisch)
+
+```{r}
+library(psfmi)
+
+modelD1_back <- psfmi_lr(data=Myimp,
+                         formula=outcome~age
+                         +bmi
+                         +gender
+                         +open
+                         +transhiatal
+                         +dummy_Neotx1
+                         +dummy_Neotx3
+                         +T34
+                         +comorb_dm
+                         +comorb_cardiovasc
+                         +comorb_hypertension
+                         +smoking
+                         +dummy_ASA34
+                         +eGFR
+                         +dummy_Hblow
+                         +dummy_Hbhigh
+                         +fev1_compl
+                         +tiff_compl,
+                         nimp=10,
+                         impvar=".imp",
+                         p.crit=0.157, method="D1", direction="BW")
+
+modelD1_back$RR_model_final
+                    
+```
+
+Pooled performance
+
+```{r}
+perf_model1 <- pool_performance(data=Myimp, nimp=10, impvar=".imp", formula= outcome ~ age + gender + open + transhiatal + dummy_Neotx1 + dummy_Neotx3 + T34 + comorb_dm + dummy_Hblow + fev1_compl, model_type="binomial")
+```
+```{r}
+perf_model1$ROC_pooled #original data: 0.71 (0.67 - 0.75) #simulation set: 0.64 (0.59 - 0.69)
+perf_model1$R2_pooled # original data: 0.17 #simulation set: 0.074
+```
+
+
+## PSFMI (handmatig) ? 
+Willen we dat er ook nog bij? 
+
+Kunnen we uit LF-PERIPRED 10.6.3.1.1. nog halen eventueel. 
+
+
+
+

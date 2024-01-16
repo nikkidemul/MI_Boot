@@ -1,0 +1,551 @@
+---
+title: "3.2.2. LF_MIB_GLM validation"
+author: "N. de Mul"
+date: "2023-11-10"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+For the bootstrap we will: 
+- Take n bootstrap samples for each m imputation set
+- Develop the glm model on all 500 bootstrap datasets, for each imputation set 
+- Test performance of the models on the bootstrap sample they were developed in and on the imputation set the bootstrap samples were derived from. 
+- Difference in model performance = optimism 
+- Pool performance measures 
+- Save output in order to create the Heinzetables and stability plots later on. 
+
+Perform bootstrap: 
+```{r}
+set.seed(21212)
+
+#function for bootstrap: 
+bootstrap <- function(dataimp, bootstrapn){
+  
+  #store output
+  bootstraplist <- list()
+  
+  #set n for number of bootstrap samples 
+  n <- bootstrapn
+  
+  #create loop
+  for(i in 1:n){
+    
+    #make sure you sample with replacement 
+    bootstrap <- sample_n(dataimp, nrow(dataimp), replace=TRUE)
+    
+    #store results in a list
+    bootstraplist[[i]] <- bootstrap
+  }
+  return(bootstraplist)
+}
+
+
+#Then create the bootstrap samples for each imputed dataset. We will use lapply to loop over the list of imputed datasets: 
+
+set.seed(21212)
+bootstrapsimp <- lapply(Final_imp, bootstrap, bootstrapn=500)
+
+#save results: 
+saveRDS(bootstrapsimp, file=paste0("bootstrapimp", ".rds"))
+   
+```
+
+Then develop the models: 
+
+```{r}
+modelglm <- function(bootstrapsets, formula){
+  
+  #store output
+  modelsbsglm <- list()
+  
+  #create loop over imputation sets 
+  for(i in 1:length(bootstrapsets)){
+    
+    #first extract list with 500 bootstraps from list with imputation sets 
+    impcat <- bootstrapsets[[i]]
+    
+    #store output of following loop
+    modelsglm <- list()
+    
+    #then create loop within that imputation set number, over the 500 bootstrap samples it contains 
+    for(j in 1:length(impcat)){
+      setbsglm <- impcat[[j]]  
+      
+    #create models using GLM
+    fullmodel <- glm(formula, data=setbsglm, family=binomial)
+    bwmodelglm <- step(fullmodel, direction="backward", trace=0)
+    modelsglm[[j]] <- bwmodelglm
+    }
+    modelsbsglm[[i]] <- modelsglm
+  }
+  return(modelsbsglm)
+}
+
+
+#Develop the bootstrap models and save them into modelsbsimp 
+
+set.seed(21212)
+modelsbsimpGLM <- modelglm(bootstrapsimp, formula=outcome~age
+                         +bmi
+                         +gender
+                         +open
+                         +transhiatal
+                         +dummy_Neotx1
+                         +dummy_Neotx3
+                         +T34
+                         +comorb_dm
+                         +comorb_cardiovasc
+                         +comorb_hypertension
+                         +smoking
+                         +dummy_ASA34
+                         +eGFR
+                         +dummy_Hblow
+                         +dummy_Hbhigh
+                         +fev1_compl
+                         +tiff_compl) 
+
+#save results for later use 
+saveRDS(modelsbsimpGLM,file=paste0("modelsbsimpGLM",".rds"))
+```
+
+Then calculate corrected performance in steps. 
+
+First, we develop the nullmodels in each individual bootstrap sample. We need these to later calculate the Index of Prediction Accuracy, conform we did for apparent model performance. 
+
+```{r}
+nullmodels <- function(bootstraps){
+  
+  #store output
+  nullmodels <- list()
+  
+  #loop over imputed datasets
+  for (i in 1:length(bootstraps)){
+    set <- bootstraps[[i]]
+    #create models
+    null <- glm(outcome~1, data=set, family=binomial)
+    nullmodels[[i]] <- null
+  }
+  return(nullmodels)
+}
+
+#develop the nullmodels. I have not names bootstrapimp to Firth, because these are the same for GLM. 
+nullmodelsglm <- lapply(bootstrapsimp, nullmodels)
+
+
+#logit function in order to obtain a logit AUC that will make it possible to later pool AUCs. 
+
+logit <- function(x){log(x / (1-x))}
+
+#estimate log c-statistic in elke imp set zodat we kunnen poolen en terug kunnen transformeren. 
+compute_c_stat_log_imp <- function(obs_outcome, pred_outcome, method="delong", direction="<"){
+  
+  #estimate c_stat
+  c_stat <- pROC::auc( response = obs_outcome,
+                       predictor = pred_outcome,
+                       direction = direction,
+                       method = method)
+  
+  #estimate confidence intervals appropriately
+  variance <- pROC::var(c_stat)
+  logit_se <- sqrt(variance)/(c_stat*(1-c_stat))
+  return(c (auc=c_stat, logitauc = logit(as.numeric(c_stat)),
+            logit_se=logit_se))
+}
+
+
+#Then the performance measures script that is the same as for apparent performance, but containing an extra loop (we now have a list of 10 - corresponding to the 10 imputation sets, and these contain lists with 500 bootstrap samples and models. We also still have the list with 10 original imputation sets). We now want to calculate bootstrapmodel performance in the bootstrap sample the model was developed in, and in the original imputation set. 
+
+impPerfBS <- function(imputatiesets, bootstrapsets, bsmodels, bsnullmodels){
+  
+  #store output as two seperate lists, one for performance in the bootstrap samples and one for performance in the original imputation sets. 
+  performancetablesbs <- list()
+  performancetablesimp <- list()
+  
+  
+  #first create a loop length of imputation sets, creating the imputation sets, the list with their respective bootstrap samples (individual), list of models for each set and list of null models for each set.  
+  for(i in 1:length(imputatiesets)){
+  
+    imputatieset <- imputatiesets[[i]]
+    bootstraplist <- bootstrapsets[[i]]
+    modelbslist <- bsmodels[[i]]
+    nullmodelbslist <- bsnullmodels[[i]]
+    
+    #then loop within the bootstrap samples lists, using the models and the nullmodels. 
+    for(j in 1:length(bootstraplist)){
+      bootstrapdf <- bootstraplist[[j]]
+      modelbs <- modelbslist[[j]]
+    nullmodelbs <- nullmodelbslist[[j]]
+    bootstrapdf$pred <- predict(modelbs, type="response", newdata=bootstrapdf)
+    
+    #auc bootstrapmodel in bootstrapsample
+    bootstrap <- compute_c_stat_log_imp(obs_outcome=bootstrapdf$outcome, pred_outcome=bootstrapdf$pred)
+    c_statlogdf <- as.data.frame(bootstrap)
+    c_statlogdf <- c_statlogdf %>% rownames_to_column("performanceM")
+    
+    #use null models for calculating IPA (bootstrapmodel in bootstrap sample)
+    bootstrapdf$prednull <- predict(nullmodelbs, type="response", newdata=bootstrapdf)
+    null <- val.prob(bootstrapdf$prednull, as.numeric(bootstrapdf$outcome)-1, pl=FALSE)
+    performancenulldf <- as.data.frame(null)
+    performancenulldf <- performancenulldf %>% rownames_to_column("performanceM")
+    performancenulldf <- performancenulldf %>% filter(!is.na(performanceM))
+    
+    #andere performance measures bootstrapmodels in bootstrapsample 
+    # first using val.prob
+    bootstrap <- val.prob(bootstrapdf$pred, as.numeric(bootstrapdf$outcome)-1, pl=FALSE)
+    bootstrapdf2 <- data.frame(bootstrap)
+    bootstrapdf2 <- bootstrapdf2 %>% rownames_to_column("performanceM")
+    
+    #then calculating IPA and O:E ratio. Storing all these measures as performanceM as well in order to later merge all the datasets. 
+    add.data.IPAbs <- data.frame(performanceM = "IPA" , bootstrap = (1-((bootstrapdf2$bootstrap[bootstrapdf2$performanceM=="Brier"])/(performancenulldf$null[performancenulldf$performanceM=="Brier"])))) 
+    add.data.IPAbslogit <- data.frame(performanceM="logitIPA", bootstrap = logit(as.numeric(add.data.IPAbs$bootstrap)))
+      add.dataOE <- data.frame(performanceM = "OE", bootstrap = as.numeric((mean(as.numeric(bootstrapdf$outcome)))/(mean(bootstrapdf$pred))))
+    bootstrapdf3 <- bind_rows(bootstrapdf2, c_statlogdf, add.data.IPAbs, add.data.IPAbslogit, add.dataOE) 
+  
+    #merge everything together 
+    bootstrapdf4 <- bootstrapdf3 %>% filter(performanceM=="auc"|performanceM=="Brier" | performanceM=="logitauc"|performanceM=="logit_se"|performanceM=="IPA"|performanceM=="logitIPA"|performanceM=="Slope" | performanceM=="Intercept" | performanceM=="OE") 
+    
+    #repeat this process for testing performance on the original imputation set
+    imputatieset$pred <- predict(modelbs, type="response", newdata=imputatieset)
+    
+    #auc
+    imp <- compute_c_stat_log_imp(obs_outcome=imputatieset$outcome, pred_outcome=imputatieset$pred)
+    c_statlogdfimp <- as.data.frame(imp)
+    c_statlogdfimp <- c_statlogdfimp %>% rownames_to_column("performanceM")
+    
+    #null model predicted values to calculate IPA later
+    imputatieset$prednull <- predict(nullmodelbs, type="response", newdata=imputatieset)
+    null <- val.prob(imputatieset$prednull, as.numeric(imputatieset$outcome)-1, pl=FALSE)
+    impnulldf <- as.data.frame(null)
+    impnulldf <- impnulldf %>% rownames_to_column("performanceM")
+    impnulldf <- impnulldf %>% filter(!is.na(performanceM))
+    
+    #performance measures using val.prob
+    imp <- val.prob(imputatieset$pred, as.numeric(imputatieset$outcome)-1, pl=FALSE)
+    impdf <- data.frame(imp)
+    impdf <- impdf %>% rownames_to_column("performanceM")
+    
+    #performance measures calculated by hand (IPA and O:E)
+    add.data.IPAimp <- data.frame(performanceM = "IPA" , imp=(1-((impdf$imp[impdf$performanceM=="Brier"])/(impnulldf$null[impnulldf$performanceM=="Brier"])))) 
+    add.data.IPAimplogit <- data.frame(performanceM="logitIPA", imp = logit(as.numeric(add.data.IPAimp$imp)))
+     add.dataOEimp <- data.frame(performanceM = "OE", imp = as.numeric(mean(as.numeric(imputatieset$outcome)))/(mean(imputatieset$pred)))
+    impdf2 <- bind_rows(impdf, c_statlogdfimp, add.data.IPAimp, add.data.IPAimplogit, add.dataOEimp) 
+     
+    #merge everything together              
+    impdf3 <- impdf2 %>% filter(performanceM=="auc"|performanceM=="logitauc"|performanceM=="logit_se"| performanceM=="Brier" | performanceM=="IPA"|performanceM=="logitIPA"|performanceM=="Slope" | performanceM=="Intercept" | performanceM== "OE")
+    
+    performance <- merge(bootstrapdf3, impdf3, by="performanceM")
+    performance$optimism <- performance$bootstrap - performance$imp
+    
+    #store the performance measures for individual bootstrap models
+    performancetablesbs[[j]] <- performance
+    
+    }
+    
+    #store the bootstrap lists in the imputation list
+    performancetablesimp[[i]] <- performancetablesbs
+    
+  }
+  return(performancetablesimp)
+}
+
+
+
+#calculate performance
+testperformanceglm <- impPerfBS(imputatiesets=Final_imp, bootstrapsets=bootstrapsimp, bsmodels=modelsbsimpGLM, bsnullmodels=nullmodelsglm)
+
+#save results
+saveRDS(testperformanceglm, file=paste0("listperformanceglm",".rds"))
+
+
+#unlist to stacked dataframe, which we will need to calculate 95% confidence intervals.  
+performance_rowbindtotalglm <- bind_rows(testperformanceglm) 
+
+#save results
+saveRDS(performance_rowbindtotalglm, file=paste0("performance_rowbindtotalglm",".rds"))
+
+```
+
+
+Then we pool the performance measures: 
+
+```{r}
+mean_performanceglm <- bind_rows(performance_rowbindtotalglm)
+
+#take the mean of the performance measures 
+mean_performanceglm <- mean_performanceglm %>% group_by(performanceM) %>% summarise(across(where(is.numeric), mean, na.rm=TRUE), .groups="drop")
+
+#then convert back to plogis for AUC
+mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="logitauc"] <- plogis(mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="logitauc"])
+mean_performanceglm$imp[mean_performanceglm$performanceM=="logitauc"] <- plogis(mean_performanceglm$imp[mean_performanceglm$performanceM=="logitauc"]) 
+
+### OLD SCRIPT FOR REFERENCE IF IT DOES NOT WORK
+# mean_performanceF$plogismeanbs <- plogis(mean_performanceF$bootstrap)
+# mean_performanceF$plogismeanimp <- plogis(mean_performanceF$imp)
+
+saveRDS(mean_performanceglm,file=paste0("meanperformanceglm",".rds"))
+```
+
+Calculate optimism correct performance measures (subtract optimism from apparent performance): 
+
+Calibration Intercept: 
+```{r}
+#
+```
+Calibration slope: 
+```{r}
+#
+```
+
+Brier: 
+```{r}
+#
+```
+
+
+Now use the stacked performance set (performance_rowbindtotalF) to calculate confidence intervals of calibration intercept and slope. 
+
+Concerning the 95% CI's: 
+* Calibration Intercept and Slope are not given in apparent performance. We will calculate the percentiles in the bootstrap sets. 
+* Concerning point estimate AUC: use estimated variance calculated using Rubin's Rules. 
+* Concerning IPA and O:E ratio: calculate the average estimate over the 10 datasets, per impset over the 500 bootstraps (bs model tested on bs set) and get the percentiles. We divide the difference in percentiles by 3.92 (2x1.96) which yields the SE per impset. We then pool these results using Rubin's Rules and use these to calculate the 95% CI of the apparent point estimates. We then shift the interval towards the point estimates of the corrected performance using the same optimism correction as for the point estimates. 
+
+
+First the calibration intercept and slope percentiles: 
+
+```{r}
+calibrationglm <- performance_rowbindtotalglm %>% filter(performanceM=="Intercept" | performanceM=="Slope")
+calibrationbsglm <- calibrationglm %>% select(performanceM, bootstrap)
+calibrationimpglm <- calibrationglm %>% select(performanceM, imp) 
+calibrationimpintglm <- calibrationimpglm %>% filter(performanceM=="Intercept")
+calibrationimpSglm <- calibrationimpglm %>% filter(performanceM=="Slope")
+var(calibrationimpintglm$imp) #variance is 0.007103361 --> 0.00795414 in simulation data ### Use this to calculate the confidence intervals, we chose to use percentiles (see below)
+```
+
+For calibration measures we decided to use percentiles surrounding the performance measures. 
+
+```{r}
+#Intercept
+quantile( calibrationimpintglm$imp, probs = 0.975) #0.2268 ### simulation data: 0.3446226 
+quantile( calibrationimpintglm$imp, probs = 0.025) #-0.1056 ### simulation data: -0.03284604
+
+#Slope
+quantile(calibrationimpSglm$imp, probs=0.975) #1.029 ### simulation data: 0.9185784
+quantile(calibrationimpSglm$imp, probs=0.025) #0.665 ### simulation data: 0.2765723
+
+```
+
+
+
+Then the 95% confidence intervals of IPA en O:E ratio. The procedure is the same. IPA will we scripted first. 
+* We need the rubins_rules script for pooling standard errors again. 
+* We use the performancelongF dataframe from 3.1.3. That contains all performance measures in a stacked dataframe. We need that for pooling the SE's of the point estimates. 
+* We calculate the 95% confidence intervals using the bootstrap models on the bootstrap samples. 
+* We then take the percentiles again, upper and lower (0.025, 0.975), take the difference and divide by 3.92 --> SE per imputationset. 
+* We then save these SE's and save them as output and use these to pool them using Rubins'Rules. 
+
+```{r}
+#compute variance over imputations using Rubins rules
+
+rubins_rules_var <- function(estimates, ses, n_imputed_sets){
+  
+  #within study variance
+  within_var <- mean(ses^2)
+  
+  #between study variance
+  theta_bar <- mean(estimates)
+  
+  between_var <- sum( (estimates - theta_bar)^2)/n_imputed_sets
+  
+  #total variance
+  total_var <- within_var + between_var + between_var/n_imputed_sets 
+  
+  return(total_var)
+}
+
+# First IPA: 
+
+performanceIPA <- performancelongGLM %>% filter(performanceM=="IPA") #these are the 10 point estimates we need for the SE calculation. 
+
+# The SE's have to be calculated per imputationset, and then later pooled. 
+
+
+getsesIPA <- function(performancelistbs){
+  
+  #store output
+  selist <- list() 
+  
+  #loop over the 10 imputed sets with bootstraps 
+  for(i in 1:length(performancelistbs)){
+    
+    #take the list per imputation set and bind rows to create a stacked dataframe 
+    performancelist <- performancelistbs[[i]]
+    performancebinded <- bind_rows(performancelist) 
+    
+    #chose the right performance measure 
+    performancemeasure <- performancebinded %>% filter(performanceM=="IPA") 
+    
+    #filter on bootstrap values only (we use bootstrap model on bootstrap sample performance)
+    performancemeasure2 <- performancemeasure %>% select(performanceM, bootstrap)
+    
+    #calculate percentiles and subsequent the standard errors 
+    upper <- quantile(performancemeasure2$bootstrap, probs=0.975)
+    lower <- quantile(performancemeasure2$bootstrap, probs=0.025)
+    se <- (upper-lower)/3.92
+    selist[[i]] <- se
+  }
+  return(selist)
+}
+
+#then use this function to get the standard errors, and bind the standard errors of the 10 imputation sets together. 
+IPAse <- getsesIPA(performancelistbs=testperformanceglm)
+IPAse2 <- bind_rows(IPAse)
+colnames(IPAse2)[1] <- "se"
+
+#Then pool these ses using rubins rules
+
+IPApunt <- performancelongGLM %>% filter(performanceM=="IPA")
+SEIPA <- rubins_rules_var(estimates=IPApunt$performanceimp, ses=IPAse2$se, n_imputed_sets=10)
+SEIPA # 2.960966e-05 
+
+#then use this value to calculate the confidence intervals 
+
+IPAupperGLM <- -0.03931757 + 1.96*sqrt(SEIPA)
+IPAlowerGLM <- -0.03931757 - 1.96*sqrt(SEIPA)
+
+
+#optimism corrected is original value IPA - corrected value IPA, using the same formula to calculate the confidence intervals. 
+-0.03931757 - 0.052370279
+
+-0.09168785 + 1.96*sqrt(SEIPA)
+-0.09168785- 1.96*sqrt(SEIPA)
+
+```
+
+
+Then we repeat this process for the observed-expected ratio: 
+
+```{r}
+performanceOE <- performancelongGLM %>% filter(performanceM=="OE") #get the 10 point estimates 
+
+#Then calculate the SE's per imputation set 
+
+getsesOE <- function(performancelistbs){
+  
+  #store output
+  selist <- list() 
+  
+  #create loop
+  for(i in 1:length(performancelistbs)){
+    performancelist <- performancelistbs[[i]]
+    performancebinded <- bind_rows(performancelist) 
+    
+    #chose performance measure
+    performancemeasure <- performancebinded %>% filter(performanceM=="OE") 
+    
+    #filter on the bootstrap values only 
+    performancemeasure2 <- performancemeasure %>% select(performanceM, bootstrap)
+    
+    #calculate percentiles and subsequent the 95% confidence intervals 
+    upper <- quantile(performancemeasure2$bootstrap, probs=0.975)
+    lower <- quantile(performancemeasure2$bootstrap, probs=0.025)
+    se <- (upper-lower)/3.92
+    selist[[i]] <- se
+  }
+  return(selist)
+}
+
+#get the standard errors and bind them together to subsequently pool them 
+OEse <- getsesOE(performancelistbs=testperformanceglm)
+OEse2 <- bind_rows(OEse)
+colnames(OEse2)[1] <- "se"
+
+#pool ses using rubins rules
+OEpunt <- performancelongGLM %>% filter(performanceM=="OE")
+SEOE <- rubins_rules_var(estimates=OEpunt$performanceimp, ses=OEse2$se, n_imputed_sets=10)
+SEOE # 2.358013e-07
+
+#calculate confidence intervals: 
+OEupperGLM <- 2.12542358 + 1.96*sqrt(SEOE)
+OElowerGLM <- 2.12542358 - 1.96*sqrt(SEOE)
+
+#corrected for optimism (same method as described for IPA): 
+2.12542358 - -0.001282099
+
+2.126706 + 1.96*sqrt(SEOE)
+2.126706 - 1.96*sqrt(SEOE)
+```
+
+Repeated this process for the Brier score
+
+```{r}
+# Brier (nu even niet meegenomen - dus nog script van originele data).
+
+performanceBrier <- performancelongGLM %>% filter(performanceM=="Brier") 
+
+getsesBrier <- function(performancelistbs){
+  selist <- list() 
+  
+  for(i in 1:length(performancelistbs)){
+    performancelist <- performancelistbs[[i]]
+    performancebinded <- bind_rows(performancelist) 
+    
+    performancemeasure <- performancebinded %>% filter(performanceM=="Brier") 
+   
+    performancemeasure2 <- performancemeasure %>% select(performanceM, bootstrap)
+   
+    upper <- quantile(performancemeasure2$bootstrap, probs=0.975)
+    lower <- quantile(performancemeasure2$bootstrap, probs=0.025)
+    se <- (upper-lower)/3.92
+    selist[[i]] <- se
+  }
+  return(selist)
+}
+
+Brierse <- getsesBrier(performancelistbs=testperformanceglm)
+Brierse2 <- bind_rows(Brierse)
+colnames(Brierse2)[1] <- "se"
+
+Brierpunt <- performancelongGLM %>% filter(performanceM=="Brier")
+SEBrier <- rubins_rules_var(estimates=Brierpunt$performanceimp, ses=Brierse2$se, n_imputed_sets=10)
+SEBrier # 5.338393e-05
+
+BrierupperGLM <- 1.21951010 + 1.96*sqrt(SEBrier)
+BrierlowerGLM <- 1.21951010 - 1.96*sqrt(SEBrier)
+```
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

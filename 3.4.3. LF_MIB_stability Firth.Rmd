@@ -1,0 +1,116 @@
+---
+title: "3.4.3. LF_MIB_stability Firth"
+author: "N. de Mul"
+date: "2023-11-13"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Stability measures Firth
+
+First step is to create datasets with predicted values for bootstrap models, tested on the original imputation set. 
+
+```{r}
+Final8_impF <- readRDS("./Final8_impF.rds")
+modelsbsimpF <- readRDS("./modelsbsimpF.rds")
+Myimp1 <- readRDS("./Myimp1.rds")
+
+predvalue <- function(imputatiesets, bsmodels){
+  imputatielijst <- list()
+  
+  
+  for(i in 1:length(imputatiesets)){
+  
+    imputatieset <- imputatiesets[[i]]
+    modelbslist <- bsmodels[[i]]
+    
+    
+    for(j in 1:length(modelbslist)){
+      modelbs <- modelbslist[[j]]
+      imputatieset$pred <- predict(modelbs, type="response", newdata=imputatieset)
+    
+    imputatiesets[[j]] <- imputatieset
+    
+    }
+    
+    imputatielijst[[i]] <- imputatiesets
+    
+  }
+  return(imputatielijst)
+}
+
+predictedvalues <- predvalue(imputatiesets=Final8_impF, bsmodels = modelsbsimpF)
+
+```
+
+
+Then we want to use the predicted values of the bootstraps of 1 imputation set, and the predicted values of the original model, per individual, per imputationset. 
+
+### Create predicted values with original (final) model in stacked set
+```{r}
+Myimp1$lp <- -1.64555592 + 0.05114650*Myimp1$Leeftijd + 0.36984852*(as.numeric(Myimp1$T34)) + -0.41631040*(as.numeric(Myimp1$comorb_dm)) + 0.32709477*(as.numeric(Myimp1$dummy_Hblow)) + -1.00113037*(as.numeric(Myimp1$dummy_Neotx1)) + -0.01326058*Myimp1$fev1_compl + 0.30679485*(as.numeric(Myimp1$gender)) + 0.63520530*(as.numeric(Myimp1$open)) + -0.68291972*(as.numeric(Myimp1$transhiataal))
+
+Myimp1$predF <- 1/(1+exp(-Myimp1$lp))
+summary(Myimp1$predF)
+```
+
+### Imputationset1 
+
+```{r}
+#select final model predicted values 
+Imp1 <- Myimp1 %>% filter(.imp=="1") %>% select(random_OKID, outcome, predF)
+
+#select bootstrap predicted values 
+Imp1bs <- predictedvalues[[1]]
+Imp1bsbr <- bind_rows(Imp1bs)
+Impbs1 <- Imp1bsbr %>% select(random_OKID, outcome, pred)
+
+#merge the two dataframes by subject ID 
+merged_df1 <- merge(Imp1, Impbs1, by="random_OKID", all.x=TRUE)
+#correct the predicted names and double variable names 
+merged_df1 <- merged_df1 %>% mutate(outcome = outcome.x) %>% mutate(predbs = pred)
+
+merged_df1 <- merged_df1 %>% select(random_OKID, outcome, predF, predbs)
+```
+
+Stability plot: 
+```{r}
+
+#correlate the predicted values 
+model <- lm(predbs ~ predF, data=merged_df1)
+
+#PERCENTIELEN berekenen: 
+Q25 = aggregate(merged_df1$predbs, list(merged_df1$predF), quantile, 0.25)
+Q75 = aggregate(merged_df1$predbs, list(merged_df1$predF), quantile, 0.75)
+
+{plot(x=merged_df1$predF, 
+                 y=merged_df1$predbs, 
+                 xlab="Original Predictions", 
+                 ylab="Bootstrap Predictions", 
+                 main="Original vs. Bootstrap Predictions - Imputationset1",
+                 pch=1,
+     cex=0.5,
+     col="grey")
+lines(0:1, 0:1, lwd=2, col="black", lty=2)
+abline(model, lty=1, lwd=2, col="darkgreen")
+lines(Q25, col="darkgreen", lty=2, lwd=1.5)
+lines(Q75, col="darkgreen", lty=2, lwd=1.5)}
+```
+
+MAPE: 
+```{r}
+merged_df1$MAPE <- merged_df1$predbs - merged_df1$predF
+summary(merged_df1$MAPE)
+```
+
+
+This script can be repeated for the amount of imputed datasets. 
+
+
+
+
+
+

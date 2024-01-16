@@ -1,0 +1,504 @@
+---
+title: "3.1.2. Apparent GLM handmatig"
+author: "N. de Mul"
+date: "2023-11-06"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Apparent Model performance GLM (handmatig). 
+
+GLM set heeft 1 en 2 als uitkomst dus calibratie loopt helemaal uit de pas. 
+Dat even aanpassen. 
+
+Load files: 
+```{r}
+library(dplyr)
+library(tibble)
+```
+
+
+```{r}
+set.seed(21212)
+backwardimpglm <- function(impsets, formula){
+  
+  #store output
+  models <- list()
+  
+  #loop over imputed datasets
+  for (i in 1:length(impsets)){
+    impset <- impsets[[i]] 
+    full <- glm(formula, family=binomial, data=impset)
+    modeli <- step(full, direction="backward", trace=0)
+    models[[i]] <- modeli
+  }
+  return(models)
+}
+
+#Create 10 models for each imputed dataset: 
+modelsglm <- backwardimpglm(impsets=Final_imp, formula=outcome~age
+                         +bmi
+                         +gender
+                         +open
+                         +transhiatal
+                         +dummy_Neotx1
+                         +dummy_Neotx3
+                         +T34
+                         +comorb_dm
+                         +comorb_cardiovasc
+                         +comorb_hypertension
+                         +smoking
+                         +dummy_ASA34
+                         +eGFR
+                         +dummy_Hblow
+                         +dummy_Hbhigh
+                         +fev1_compl
+                         +tiff_compl)
+
+```
+
+Majority vote: 
+```{r}
+
+#function to extract the models from the above generated output
+extractmodels <- function(modelimplist){
+  
+  #store output 
+  listmodeldfs <- list()
+  
+  #create loop over models of imputed datasets 
+  for (i in 1:length(modelimplist)){
+    modeli <- modelimplist[[i]]
+    modeldf <- data.frame(modeli$coefficients)
+    
+    #get standard errors from glm output
+    modeldf2 <- as.data.frame(sqrt(diag(vcov(modeli))))
+    
+    #transformations to get the correct column names 
+    modeldf3 <- modeldf %>% rownames_to_column("variable")
+    modeldf4 <- modeldf2 %>% rownames_to_column("variable")
+    modeldf4 <- modeldf4 %>% rename(se="sqrt(diag(vcov(modeli)))")
+    
+    #merge everything together and create output
+    modeldf5 <- merge(modeldf3, modeldf4, by="variable", all.x=TRUE)
+    listmodeldfs[[i]] <- modeldf5
+  }
+  return(listmodeldfs)
+}
+
+#get this modeldata (coefficients and standard errors) from the list with models 
+modeldata <- extractmodels(modelsglm)
+
+#then count how many times each predictor was selected in the final model. When selected > 50% of the time, it should be kept in the final model. 
+
+#first create long dataframe 
+modeldatamerged <- bind_rows(modeldata)
+
+
+#function for a majority vote 
+majorityvote <- function(bindedset, impN, freq){
+  nimp <- impN
+  prop <- freq 
+  calculatefreq <- function(nimp, prop) { V <- nimp * prop 
+  return(V) } 
+  vote <- calculatefreq(nimp, prop)
+  
+  
+  finalmodel <- data.frame()
+  
+  count <- bindedset %>% group_by(variable) %>% mutate(freq=n()) %>% ungroup() %>% filter(freq > vote) %>% select(-freq)
+  finalmodel <- count %>% group_by(variable) %>% summarise(Meancoef = mean(modeli.coefficients))
+  return(finalmodel)
+
+}
+
+#final model: 
+finalmodelimpglm <- majorityvote(modeldatamerged, impN=10, freq=0.5)
+
+```
+
+Pooling standard errors: 
+```{r}
+
+#make transformation of column names 
+modeldatamerged2 <- as.data.frame(modeldatamerged %>% rename(coef = "modeli.coefficients"))
+
+#pooling function using rubins_rules 
+rubins_rules_var <- function(estimates, ses, n_imputed_sets){
+  
+  #within study variance
+  within_var <- mean(ses^2)
+  
+  #between study variance
+  theta_bar <- mean(estimates)
+  
+  between_var <- sum(estimates - theta_bar)^2/n_imputed_sets
+  
+  #total variance
+  total_var <- within_var + between_var/n_imputed_sets
+  
+  return(total_var)
+}
+
+# do some transformations to be able to merge the standard errors with the final model dataframe 
+results <- modeldatamerged2 %>% group_by(variable) %>% summarise(rubins_rules_var(estimates=coef, ses=se, n_imputed_sets=10)) 
+standarderrors <- results
+standarderrors <- standarderrors %>% rename(ses = "rubins_rules_var(estimates = coef, ses = se, n_imputed_sets = 10)")
+
+#merge with final model
+finalmodelimpglm$OR <- exp(finalmodelimpglm$Meancoef) 
+finalmodelimpglm2 <- merge(finalmodelimpglm, standarderrors, by="variable", all.x=TRUE) 
+
+#calculate 95% CI 
+finalmodelimpglm3 <- finalmodelimpglm2 
+finalmodelimpglm3$lower <- finalmodelimpglm3$Meancoef - 1.96*sqrt(finalmodelimpglm3$ses)
+finalmodelimpglm3$upper <- finalmodelimpglm3$Meancoef - 1.96*sqrt(finalmodelimpglm3$ses)
+finalmodelimpglm3$lowerOR <- exp(finalmodelimpglm3$lower)
+finalmodelimpglm3$upperOR <- exp(finalmodelimpglm3$upper)
+
+#change order of variables to compare with psfmi 
+finalmodelimpglm3 <- finalmodelimpglm3 %>% select(variable, Meancoef, ses, lower, upper, OR, lowerOR, upperOR)
+```
+
+Save file: 
+```{r}
+saveRDS(finalmodelimpglm3, file=paste0("FinalmodelGLMsim"))
+```
+
+
+
+Calculate apparent model performance 
+
+```{r}
+predcalc <- function(impsets, finalmodeldf){
+  
+  #store output 
+  predimps <- list()
+  
+  #GLM provides the model output of binary variables as "variablex1", since this is not the same name als the names of the variables in the dataset, we remove the extra "1" from this column names: 
+  finalmodeldf$variable <- sub("(.*)1$", "\\1", finalmodeldf$variable) 
+    model_coefs <- with(finalmodeldf, setNames(Meancoef, variable))
+  
+    #create loop over imputed datasets, using the final model coefficients, multiplying them with the variable values. 
+  for(i in 1:length(impsets)){
+    datasetimp <- impsets[[i]]
+    
+    #we need to set everything to numeric 
+    impsetprep <- datasetimp %>% mutate_if(is.factor, as.numeric)
+    
+    #multiply all model coefficients with their respective variable value, not using the intercept variable (-1). 
+    impsetprep <- impsetprep %>% mutate(finalmodellp = model_coefs["(Intercept)"] + rowSums(across(all_of(names(model_coefs)[-1]),
+                                         ~ get(cur_column()) * model_coefs[cur_column()]))) 
+    
+    #paste this value to the imputed dataset as predicted value. 
+    impsetpred <- datasetimp
+    impsetpred$lp <- impsetprep$finalmodellp
+    impsetpred$pred <- 1/(1+exp(-impsetpred$lp))
+    predimps[[i]] <- impsetpred
+  }
+  return(predimps)
+}
+
+#get the predicted values by final model for each imputed dataset 
+impsetspredGLM <- predcalc(Final_imp, finalmodelimpglm3)
+```
+
+
+Because we want to calculate IPA, we need to calculate a null model Brier score. Therefore we also have to calculate null predicted values. 
+```{r}
+
+#make null models 
+nullmodels <- function(impsets){
+  
+  #store output
+  nullmodels <- list()
+  
+  #loop over imputed datasets
+  for (i in 1:length(impsets)){
+    set <- impsets[[i]]
+    #create models
+    null <- glm(outcome~1, data=set, family=binomial)
+    nullmodels[[i]] <- null
+  }
+  return(nullmodels)
+}
+
+#develop null models 
+nullmodelsGLM <- nullmodels(Final_imp) #for logistic regression models, the output should be conform the prevalence of the outcome. 
+
+#extract nullmodels 
+nulldataGLM <- extractmodels(nullmodelsGLM)
+
+
+#we use the same script as above, we don't need to do a majority vote because we only included an intercept, but we want to summarise the coefficients so we use the same function to do so. 
+
+nulldatamergeGLM <- bind_rows(nulldataGLM)
+
+nullmodelimpGLM <- majorityvote(nulldatamergeGLM, impN=10, freq=0.5) 
+
+
+#calculate performance measures 
+predcalcnull <- function(predimpsets, nullmodeldf){ 
+  
+  #input for the function: the imputationsets including the predicted values of the apparent model and the final nullmodel (pooled). 
+  
+  #store output: 
+  totalpreds <- list()
+  
+  #specificy coefficients
+    model_coefs <- with(nullmodeldf, setNames(Meancoef, variable))
+  
+    #loop over imputed datasets
+  for(i in 1:length(predimpsets)){
+    #specifiy each dataset
+    predset <- predimpsets[[i]]
+    
+    #calculate null model predicted values 
+    impsetprep <- predset %>% mutate_if(is.factor, as.numeric)
+    impsetprep <- impsetprep %>% mutate(finalmodellp = as.numeric(model_coefs["(Intercept)"]))
+    
+    impsetpred <- predset
+    impsetpred$lpnull <- impsetprep$finalmodellp
+    impsetpred$prednull <- 1/(1+exp(-impsetpred$lpnull))
+    totalpreds[[i]] <- impsetpred
+  }
+  return(totalpreds)
+}
+
+#get new datasets, including the predicted value of the final model and the predicted values of the nullmodel. 
+completeGLM <- predcalcnull(impsetspredGLM, nullmodelimpGLM) 
+```
+
+not all performance measures can be easily pooled. 
+For AUC we want to logit transform and then pool, and convert back. 
+```{r}
+#logit function to be able to transform AUC and pool AUC 
+
+logit <- function(x){log(x / (1-x))}
+
+#estimate log c-statistic in elke imp set zodat we kunnen poolen en terug kunnen transformeren. 
+compute_c_stat_log_imp <- function(obs_outcome, pred_outcome, method="delong", direction="<"){
+  
+  #estimate c_stat
+  c_stat <- pROC::auc( response = obs_outcome,
+                       predictor = pred_outcome,
+                       direction = direction,
+                       method = method)
+  
+  #estimate confidence intervals appropriately
+  variance <- pROC::var(c_stat)
+  logit_se <- sqrt(variance)/(c_stat*(1-c_stat))
+  return(c (logitauc = logit(as.numeric(c_stat)),
+            logit_se=logit_se))
+}
+
+library(rms)
+library(pROC)
+
+#function to get all desired performance measures. We choose AUC, IPA, Brier, OE ratio and calibration intercept and slope. 
+
+impPerf <- function(impsetspred){
+  
+  #store output
+  performancetablesimp <- list()
+  
+  #create a loop over the imputed datasets, that now contain predicted values (pred) of the final model and predicted values of the nullmodel (prednull)
+  for(i in 1:length(impsetspred)){
+    
+    #calculate auc en logit_auc --> save the logit. We make sure we store these as a variable called performanceM for all calculations, so we can later merge these sets together. 
+    totalpred <- impsetspred[[i]] 
+    performanceimp <- compute_c_stat_log_imp(obs_outcome=totalpred$outcome, pred_outcome=totalpred$pred)
+    c_statlogdf <- as.data.frame(performanceimp)
+    c_statlogdf <- c_statlogdf %>% rownames_to_column("performanceM")
+    
+    #calculate other performance statistics using val.prob, storing them as performanceM variable in a separate dataframe. 
+    performanceimp <- val.prob(totalpred$pred, as.numeric(totalpred$outcome)-1, pl=FALSE)
+    performancedf <- data.frame(performanceimp)
+    performancedf <- performancedf %>% rownames_to_column("performanceM")
+    performancedf <- performancedf %>% filter(!is.na(performanceM))
+    
+    #calculate performance statistics for the null model in order to calculate IPA further on
+    performancenull <- val.prob(totalpred$prednull, as.numeric(totalpred$outcome)-1, pl=FALSE)
+    performancenulldf <- as.data.frame(performancenull)
+    performancenulldf <- performancenulldf %>% rownames_to_column("performanceM")
+    performancenulldf <- performancenulldf %>% filter(!is.na(performanceM)) #dit moest ik erbij doen omdat hij om een of andere reden NA's kreeg, omdat er 1 variabele in kolom performanceM NA werd, en die nam hij mee met de Brier. 
+  
+    #now calculate the performance measures that are not returned by val.prop by hand (IPA, OE). We also transformed IPA when we were not yet sure how to pool IPA. 
+    add.data.IPA <- data.frame(performanceM = "IPA", performanceimp = 1-((performancedf$performanceimp[performancedf$performanceM=="Brier"])/(performancenulldf$performancenull[performancenulldf$performanceM=="Brier"])))
+    add.data.IPA2 <- data.frame(performanceM = "logitIPA", performanceimp=logit(as.numeric(add.data.IPA$performanceimp)))
+    add.data.OE <- data.frame(performanceM = "OE", performanceimp =  (mean((as.numeric(totalpred$outcome)-1)))/(as.numeric(mean(as.numeric(totalpred$pred)))))
+    dfperformance2 <- bind_rows(performancedf, c_statlogdf, add.data.IPA, add.data.IPA2, add.data.OE) #wrap it all toghether                          
+    dfperformance3 <- dfperformance2 %>% filter(performanceM=="logitauc"|performanceM=="logit_se"|performanceM=="IPA"|performanceM=="logitIPA"|performanceM=="Slope" | performanceM=="Intercept" | performanceM=="Brier" | performanceM=="OE")
+    performancetablesimp[[i]] <- dfperformance3
+    
+  }
+  return(performancetablesimp)
+}
+
+
+performanceimpGLM <- impPerf(completeGLM) 
+
+
+
+
+#stack de sets, take the average and then transform back 
+performancelongGLM <- bind_rows(performanceimpGLM)
+performancesummaryGLM <- performancelongGLM %>% group_by(performanceM)
+performancesummary2GLM <- performancesummaryGLM %>% summarise(Meanperformance = mean(performanceimp), .groups="drop")
+performancesummary2GLM$nonlogmean <- plogis(performancesummary2GLM$Meanperformance)
+
+#now we have a table both including the logit mean and the mean of the original values. The only performance measure that we wanted to pool as logit was AUC, therefore we create a new table where all performance measures are in their right format: 
+
+finalperformanceGLM <- performancesummary2GLM %>% select(performanceM, Meanperformance)
+finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="logitauc"] <- performancesummary2GLM$nonlogmean[performancesummary2GLM$performanceM=="logitauc"]
+
+finalperformanceGLM <- finalperformanceGLM %>% filter(performanceM != "logitIPA")
+finalperformanceGLM <- finalperformanceGLM %>% filter( performanceM != "logit_se")
+finalperformanceGLM$performanceM <- ifelse(finalperformanceGLM$performanceM=="logitauc", "AUC", finalperformanceGLM$performanceM)
+
+#save finalmodel performance GLM 
+
+
+#pooling the SE's of the AUC, logit, we have to use the performancelong file again. We save these standard errors to later calculate the confidence intervals surrouding the AUC for both apparent performance and bootstrap performance. 
+
+# Rubin's rules voor SE c-statistic---
+rubins_rules_var_auc <- function( estimates,
+                                  ses,
+                                  n_imputed_sets){
+  # within study variance
+  within_var <- mean( ses^2)
+  
+  # between study variance
+  between_var <- (1 + ( 1/ n_imputed_sets)) * var( estimates)
+  
+  # total variance
+  total_var <- within_var + between_var
+  
+  return( total_var)
+}
+
+total_var_performance_impGLM <- rubins_rules_var_auc(estimates=performancelongGLM$performanceimp[performancelongGLM$performanceM=="logitauc"], ses=performancelongGLM$performanceimp[performancelongGLM$performanceM=="logit_se"], n_imputed_sets=10) 
+
+total_var_performance_impGLM #0.01045909. ###simulation:  0.01167819
+
+```
+
+Calculate the 95% confidence interval surrounding the AUC: 
+```{r}
+#original dataset
+plogis(logit(0.71) - 1.96*sqrt(0.01045909))
+plogis(logit(0.71) + 1.96*sqrt(0.01045909))
+
+#simulation data
+plogis(logit(0.63) - 1.96*sqrt(0.0105969))
+plogis(logit(0.63) + 1.96*sqrt(0.0105969))
+```
+Save performance output: 
+```{r}
+saveRDS(finalperformanceGLM, file=paste0("finalappperformanceGLMsim"))
+```
+
+
+
+
+Calibration plot: 
+```{r}
+# smoot calibration curve van final model op stacked imputed datasets
+#Nu als volgt ine en stacked lijst gezet: 
+outcomestacked <- lapply(impsetspredGLM, function(x) x%>%select(outcome))
+predstacked <- lapply(impsetspredGLM, function(x) x%>%select(pred))
+
+y_inputcheck <- t( rbind( unlist( outcomestacked))) #check whether vaues are 0 and 1 or 1 and 2 (then -1) 
+
+# provide coordinates of the smooth calibration curve ----
+draw_smooth_calibration <- function( obs_outcome, pred_outcome){
+  
+  y_input <- t( rbind( unlist( obs_outcome)))
+  x_input <- t( rbind( unlist( pred_outcome)))
+  
+  y_coordinates <- loess( (as.numeric(y_input)-1) ~ x_input)$fitted #-1 because it transforms 0 and 1 to 1 and 2 when transforming to numeric variable. For GLM this was necessary, for Firth it was not (because these were already in numeric format)
+  
+  # store all coordinates of smooth curve (ordered based on x)
+  smooth_cal_slope_info <- list( x_coordinates = x_input[order( x_input)],
+                                 y_coordinates = y_coordinates[order( x_input)])
+  
+  
+  # output overall info calibration slope
+  return( smooth_cal_slope_info)
+}
+
+smooth_info <- draw_smooth_calibration(obs_outcome=outcomestacked, pred_outcome=predstacked)
+
+
+plot_smooth_calibration <- function( x_coordinates,
+                                     y_coordinates){
+  plot(x = 1,                 
+       xlab = "Estimated probability", 
+       ylab = "Observed risk",
+       xlim = c(0, 1), 
+       ylim = c(0, 1),
+       main = "",
+       type = "n")
+  
+  # add reference line
+  abline( a = 0, b = 1, lty = 2)
+  
+  # add smooth calibration curve
+  lines( x = x_coordinates,
+         y = y_coordinates)
+  
+  # add histogram at bottom
+  par(new = T)
+  # from rms val.prob function
+  lim <- c(0,1)
+  bins <- seq(lim[1], lim[2], length=101)
+  x <- x_coordinates[x_coordinates >= lim[1] & x_coordinates <= lim[2]]
+  f <- table(cut(x, bins))
+  j <- f > 0
+  bins <- (bins[-101])[j]
+  f <- f[j]
+  f <- lim[1] + .15 * diff(lim) * f / max(f)
+  segments(bins, 0, bins, f)
+}
+
+calibrationplot <- plot_smooth_calibration(x_coordinates=smooth_info$x_coordinates, y_coordinates=smooth_info$y_coordinates) 
+
+```
+
+
+Make an ROC curve: 
+
+In order to do this, we use the stacked dataset and calculate the predicted values by hand (because we don't have model output). 
+
+```{r}
+finalmodelimpglm3
+```
+
+
+```{r}
+library(pROC)
+
+Myimp$lpGLM <- 2.22187840	 + 0.03613563*Myimp$age + 0.32613135*as.numeric(Myimp$comorb_hypertension) + -3.07940731*as.numeric(Myimp$eGFR) + -0.01563689*Myimp$fev1_compl + 0.57910986*as.numeric(Myimp$gender) + -0.88026153*as.numeric(Myimp$transhiatal) + 0.49382807*as.numeric(Myimp$smoking)
+
+Myimp$predGLM <- 1/(1+exp(-Myimp$lpGLM))
+summary(Myimp$predGLM)
+myROC <- roc(Myimp$outcome ~Myimp$lpGLM, levels=c(0,1))
+plot(myROC, xlim=c(1,0))
+auc(myROC)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

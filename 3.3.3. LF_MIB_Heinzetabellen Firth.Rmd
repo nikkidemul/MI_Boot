@@ -1,0 +1,328 @@
+---
+title: "3.3.3. LF_MIB_Heinzetabellen Firth"
+author: "N. de Mul"
+date: "2023-11-10"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Creating Heinzetables Firth
+
+In the study by Heinze et al. 2017 (DOI: 10.1002/bimj.201700067) they described a table to assess model uncertainty (table 5 in the article). We tried to reproduce this table as a measure for model uncertainty. 
+
+```{r}
+#First step is to create a dataframe containing all candidate predictors. We therefore put all candidate predictors in, and a colum containing only 0's (count how many you need). 
+#We then make a dataframe with coefficients from the selected models, and their standard errors. We merge all that together. The 'empty' variable makes sure that all candidate predictors are still in the final table, even if they were not selected at all. 
+
+heinzestart <- function(modelslist){
+  
+  #store output 
+  out <- list()
+  for(i in 1:length(modelslist)){
+    variable <- c("(Intercept)", "Leeftijd", "bmi","gender", "open", "transhiataal", "dummy_Neotx1", "dummy_Neotx3", "T34", "comorb_dm", "comorb_cardiovasc", "comorb_hypertension", "smoking", "dummy_ASA34", "eGFR", "dummy_Hblow", "dummy_Hbhigh", "fev1_compl", "tiff_compl")
+    empty <- c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0) #create empty variables to include all candidate predictors in the heinzetabels. 
+    df1 <- data.frame(variable, empty)
+    modeli <- modelslist[[i]]
+    df2 <- data.frame(modeli$coefficients)
+    df3 <- df2 %>% rownames_to_column("variable")
+    df4 <- as.data.frame(sqrt(diag(modeli$var))) #this gets the standard errors from the model output
+    df5 <- df4 %>% rownames_to_column("variable")
+    df6 <- merge(df1, df3, by="variable", all.x=TRUE) #merge basis dataframe with 0's and variable names to the coefficients 
+    df7 <- merge(df6, df5, by="variable", all.x=TRUE) #merge this dataframe with the dataframe that contains the standarderrors
+    #rename the columns into more efficient use
+    names(df7) <- c("variable", "empty", "Estimate", "se")
+    df7$var <- df7$se^2 
+    out[[i]] <- df7
+  }
+  return(out)
+}
+
+#then apply this first start script to the models generated in the bootstraps. 
+
+heinzestartdfF <- lapply(modelsbsimpF, heinzestart)
+```
+
+We then merge all these dataframes (lists) by binding the rows. We then get a list with 10 (because in our case 10 imputations) long dataframes. 
+
+```{r}
+
+heinzestartdflongF <- lapply(heinzestartdfF, bind_rows)
+
+#then combine all information to get a dataframe with variable names with their coefficients and standard errors. Make sure 0 is imputed when a variable is not selected, in order to obtain valid medians (of zero) later. We call this function fix 0s, because we make sure the 0s are imputed. 
+
+
+fix0s <- function(heinzestartlist){
+  
+  #store output
+  tablestart <- list()
+  
+  #loop over the binded dataframes. 
+  for(i in 1:length(heinzestartlist)){
+    heinze1 <- as.data.frame(heinzestartlist[[i]])
+    heinze1$coef0 <- ifelse(is.na(heinze1$Estimate),0,heinze1$Estimate)
+    heinze1$se0 <- ifelse(is.na(heinze1$se),0,heinze1$se)
+    heinze1$var0 <- ifelse(is.na(heinze1$var),0,heinze1$var)
+    heinze2 <- heinze1[ ,c("variable", "coef0", "se0", "var0")]
+  tablestart[[i]] <- heinze2
+  }
+  return(tablestart)
+  }
+# 
+heinzestartwith0sF <- fix0(heinzestartdflongF) #the start of the heinzetables per imputationset. 
+
+#then calculate mean coefficients, mean standard errors, median coefficients, median standard errors, quantiles, etc. Anything you like. For now I have calculated several measures, but will remove things I don't need in a later stadium. 
+
+heinzepool <- function(listofHtables){
+  
+  #store results
+  heinzepool <- list()
+    for(i in 1:length(listofHtables)){
+      tableI <- as.data.frame(listofHtables[[i]])
+      result <- tableI %>% group_by(variable)
+      result2 <- result %>% summarise(Meancoef = mean(coef0), meanSE = mean(se0), Mediancoef = median(coef0), MedianSE = median(se0), coef2.5p = quantile(coef0, 0.025), coef97.5p = quantile(coef0, 0.975), se2.5p=quantile(se0, 0.025), se97.5 = quantile(se0, 0.975), sqE = mean(var0),  .groups="drop")
+      heinzepool[[i]] <- result2
+    }
+  return(heinzepool)
+}
+
+heinzebspartF <- heinzepool(heinzestartwith0sF) 
+#now we have the heinzetables for the bootstrap part (bspart) of the table. 
+
+
+#But we also have to include the original model in this table. The heinzetables are made for each individual imputed dataset, therefore with original model I mean the original model of the individual imputation sets! The full models (including all candidate predictors). 
+
+
+originalimpmodelsF <- function(imputationsets, formula){
+  impmodelsfull <- list()
+  for(i in 1:length(imputationsets)){
+    seti <<- imputationsets[[i]]
+    full <- logistf(formula, data=seti)
+    full1 <- data.frame(full$coefficients)
+    full2 <- full1 %>% rownames_to_column("variable")
+    full3 <- as.data.frame(diag(full$var))
+    full4 <- cbind(full2, full3) #NB: dit is dus heel lastig dat het zo moet, maar bij de fullmodel (zonder flic en backward) nummert hij dus alleen de variantie/se (dus voor variable 1-19 ipv dat hij dat koppelt aan de variabele naam). Ik heb dit droog getest en dit gaat goed, maar echt elegant vind ik het niet.
+    names(full4) <- c("variable", "globalEst", "globalvar")
+    full4$globalse <- sqrt(full4$globalvar)
+    impmodelsfull[[i]] <- full4
+  }
+  return(impmodelsfull)
+}
+
+originalmodelsF <- originalimpmodelsF(imputationsets = Final8_impF, formula=outcome~Leeftijd
+                         +bmi
+                         +gender
+                         +open
+                         +transhiataal
+                         +dummy_Neotx1
+                         +dummy_Neotx3
+                         +T34
+                         +comorb_dm
+                         +comorb_cardiovasc
+                         +comorb_hypertension
+                         +smoking
+                         +dummy_ASA34
+                         +eGFR
+                         +dummy_Hblow
+                         +dummy_Hbhigh
+                         +fev1_compl
+                         +tiff_compl)
+
+
+#then merge the heinzetable thus far with the original model and calculate bias and RMSDratio. 
+
+heinzetable <- function(heinzeresults, originalmodellist){
+  
+  #store output 
+  heinze_res <- list()
+  
+  #loop over the list with imputed sets (with their corresponding heinzetables) 
+  for(i in 1:length(heinzeresults)){
+    
+    #get heinzetables thus far and merge them with the originalmodel dfs. 
+    heinzedf <- heinzeresults[[i]]
+    originalmodeldf <- originalmodellist[[i]]
+    heinze <- merge(originalmodeldf, heinzedf, by="variable", all.x=TRUE)
+    
+    #calculate bias and RMSDratio
+    heinze$bias <- as.numeric((heinze$Meancoef - heinze$globalEst)/heinze$globalEst)
+    heinze$RMSD <- sqrt(heinze$sqE)
+    heinze$RMSDr <- heinze$RMSD / heinze$globalse
+    tableheinze <- heinze[ ,c("variable", "globalEst", "globalse", "Meancoef", "Mediancoef", "coef2.5p", "coef97.5p", "meanSE", "MedianSE", "sqE", "bias", "RMSD", "RMSDr")]
+    
+    #store these results again 
+    heinze_res[[i]] <- tableheinze
+  }
+  return(heinze_res)
+}
+
+#get these results: 
+heinzetable_impF <- heinzetable(heinzeresults = heinzebspartF, originalmodellist=originalmodels)
+
+saveRDS(heinzetable_impF,file=paste0("heinzetable_impF",".rds"))
+
+
+#then also add the selected models, that are extracted from the model formula. 
+modelimpse <- function(modellist){
+  
+  #store output
+  modeldfs <- list()
+  
+  #loop over the list with models (the 10 selected models in the individual imputation sets - in 3.2.3)
+  for(i in 1:length(modellist)){
+    modelimp <- modellist[[i]]
+    coefdf <- data.frame(modelimp$coefficients)
+    coefdf2 <- coefdf %>% rownames_to_column("variable")
+    standarderr <- data.frame(sqrt(diag(modelimp$var)))
+    standarderr2 <- standarderr %>% rownames_to_column("variable")
+    modeldf <- merge(coefdf2, standarderr2, by="variable")
+    names(modeldf) <- c("variable", "selectedEst", "selectedse")
+    modeldfs[[i]] <- modeldf
+  }
+  return(modeldfs)
+}
+
+selectedmodelsF <- modelimpse(modelsF)
+
+#then wrap it all together 
+finalheinze <- function(selectedmodels, heinzetables){
+  
+  #store output
+  finalheinzetables <- list()
+  
+  #loop over the list with heinzetables per imputationset
+  for(i in 1:length(heinzetables)){
+    heinzetableI <- heinzetables[[i]]
+    selectedmodeldfi <- selectedmodels[[i]]
+    finalheinze <- merge(heinzetableI, selectedmodeldfi, by= "variable", all.x=TRUE)
+    #rearrange table in the right order
+    finalheinze2 <- finalheinze %>% select(variable, globalEst, globalse, selectedEst, selectedse, RMSDr, bias, Mediancoef, coef2.5p, coef97.5p)
+    finalheinzetables[[i]] <- finalheinze2
+  }
+  return(finalheinzetables)
+}
+# 
+finalheinzetablesFirth <- finalheinze(selectedmodelsF, heinzetable_impF)
+# #endproduct is the final heinze table, but the frequencies are still missing. 
+
+```
+
+Then we have to add the frequencies in which coefficients were selected within each bootstrap procedure (per imputation set). 
+
+```{r}
+countloop <- function(modellist){
+  
+  #store output
+  modeldfsimp <- list()
+  dfmodels <- list()
+  
+  #loop over list with models
+  for(i in 1:length(modellist)){
+    modellistbs <- modellist[[i]] #bootstraps under each imputed dataset
+    
+    for(j in 1:length(modellistbs)){
+      bsmodel <- modellistbs[[j]] #individual bootstrap model
+      bsmodeldf <- as.data.frame(bsmodel$coefficients)
+      bsmodeldf <- bsmodeldf %>% rownames_to_column("variable")
+      dfmodels[[j]] <- bsmodeldf #dataframe with variables selected in individual bootstrap
+    }
+    modeldfsimp[[i]] <- dfmodels #hang them under the imputed datasets 
+  }
+  return(modeldfsimp)
+}
+
+variablesselectedF <- countloop(modelsbsimpF)
+```
+
+Then create the tables, including the frequency variable 
+```{r}
+freqtables <- function(variablesdflist, bootstrapnumber){
+  
+  #store output
+  freqtables <- list()
+  n <- bootstrapnumber
+  
+  #loop over variable list 
+  for (i in 1:length(variablesdflist)){
+    freqi <- variablesdflist[[i]]
+    freqi <- bind_rows(freqi)
+    freq_count <- freqi %>% group_by(variable) %>% summarise(count=n())
+    freq_count$freq <- freq_count$count/n*100
+    freq_count <- freq_count %>% mutate(across(where(is.numeric), ~round(.,0)))
+    freqtables[[i]] <- freq_count
+  }
+  return(freqtables)
+}
+
+heinzefreqtablesF <- freqtables(variablesselectedF, bootstrapnumber=500)
+
+#merge frequency tableswith final heinze tables: 
+
+finalheinzefreq <- function(finalheinzes, freqtables){
+  
+  #store output 
+  finalheinzeF <- list()
+  
+  #loop over the list with heinzetables 
+  for(i in 1:length(finalheinzes)){
+    finalheinzeI <- finalheinzes[[i]]
+    freqtableI <- freqtables[[i]]
+    finalheinzeT <- merge(finalheinzeI, freqtableI, by="variable", all.x=TRUE)
+    
+    #select the right variables
+    finalheinzeT2 <- finalheinzeT %>% select(variable, globalEst, globalse, freq, selectedEst, selectedse, RMSDr, bias, Mediancoef, coef2.5p, coef97.5p)
+    finalheinzeT2$freq <- ifelse(is.na(finalheinzeT2$freq),0,finalheinzeT2$freq)
+    
+    #make sure that the non-selected variables are 0 (coefficients and standard errors)
+    finalheinzeT2$selectedEst <- ifelse(is.na(finalheinzeT2$selectedEst),0,finalheinzeT2$selectedEst)
+    finalheinzeT2$selectedse <- ifelse(is.na(finalheinzeT2$selectedse),0,finalheinzeT2$selectedse)
+    
+    #tweaking it to my liking, only 2 decimals, renaming the variables for table format (export)
+    finalheinzeT2 <- finalheinzeT2 %>% mutate(across(where(is.numeric), ~round(.,2)))
+    new_names <- c(`(Intercept)`="(Intercept)", Leeftijd="Age", open="Open", transhiataal="Transhiatal approach", dummy_Neotx1="Chemotherapy", T34 = "Tumorstage 3 or higher", dummy_Hblow="Hb < 7.5 mmol/L", fev1_compl="FEV1", gender="sex at birth", eGFR="eGFR", comorb_dm="Diabetes Mellitus", smoking="Smoking history", dummy_ASA34="ASA 3 or higher", comorb_cardiovasc="Cardiovascular comorbidity", dummy_Neotx3="Chemoradiation", dummy_Hbhigh="Hb > 8.5 mmol/L", comorb_hypertension="Hypertension", tiff_compl="Tiffeneau index", bmi="BMI")
+    finalheinzeT2$variable <- as.character(new_names[finalheinzeT2$variable])
+    ########finalheinzeT2$freq[finalheinzeT2$variable=="(Intercept)"] <- 101 #to get intercept on top of the table below. Need to fix this later on. 
+    finalheinzeF[[i]] <- finalheinzeT2
+  }
+  return(finalheinzeF)
+}
+
+finalheinzetablesFirth2 <- finalheinzefreq(finalheinzetablesFirth, heinzefreqtablesF)
+
+saveRDS(finalheinzetablesFirth2, file=paste0("finalheinzetablesFirth",".rds"))
+```
+
+
+Add them as attachments: 
+```{r}
+finalheinze1 <- finalheinzetablesFirth2[[1]]
+finalheinze2 <- finalheinzetablesFirth2[[2]]
+finalheinze3 <- finalheinzetablesFirth2[[3]]
+finalheinze4 <- finalheinzetablesFirth2[[4]]
+finalheinze5 <- finalheinzetablesFirth2[[5]]
+finalheinze6 <- finalheinzetablesFirth2[[6]]
+finalheinze7 <- finalheinzetablesFirth2[[7]]
+finalheinze8 <- finalheinzetablesFirth2[[8]]
+finalheinze9 <- finalheinzetablesFirth2[[9]]
+finalheinze10 <- finalheinzetablesFirth2[[10]]
+```
+
+Then make them beautiful using sjPlot: 
+```{r}
+library(sjPlot)
+tab_df(finalheinze1, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 1")
+tab_df(finalheinze2, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 2", overflow=auto)
+tab_df(finalheinze3, sort.column=-4,col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 3")
+tab_df(finalheinze4, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 4")
+tab_df(finalheinze5, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 5")
+tab_df(finalheinze6, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 6")
+tab_df(finalheinze7, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 7")
+tab_df(finalheinze8, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 8")
+tab_df(finalheinze9, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 9")
+tab_df(finalheinze10, sort.column=-4, col.header=c("Predictor", "Global Model Estimate", "Global Model Standard Error", "Bootstrap inclusion frequency (%)", "Selected Model Estimate", "Selected Model Standard Error", "RMSD ratio", "Relative conditional bias (%)", "Bootstrap median", "Bootstrap 2.5th percentile", "Bootstrap 97.5th percentile"), title="Imputationset 10")
+```
+
+
+
