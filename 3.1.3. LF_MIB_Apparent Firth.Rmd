@@ -204,7 +204,6 @@ predcalc <- function(impsets, finalmodeldf){
 
 #get the predicted values by final model for each imputed dataset 
 impsetspredF <- predcalc(Final_impF, finalmodelimp)
-
 ```
 
 
@@ -317,13 +316,13 @@ impPerf <- function(impsetspred){
     c_statlogdf <- c_statlogdf %>% rownames_to_column("performanceM")
     
     #calculate other performance statistics using val.prob, storing them as performance M variable in a seperate dataframe 
-    performanceimp <- val.prob(totalpred$pred, as.numeric(totalpred$outcome)-1, pl=FALSE)
+    performanceimp <- val.prob(totalpred$pred, as.numeric(totalpred$outcome), pl=FALSE)
     performancedf <- data.frame(performanceimp)
     performancedf <- performancedf %>% rownames_to_column("performanceM")
     performancedf <- performancedf %>% filter(!is.na(performanceM))
     
     #calculate performance statistics for the null model to calculate IPA further on
-    performancenull <- val.prob(totalpred$prednull, as.numeric(totalpred$outcome)-1, pl=FALSE)
+    performancenull <- val.prob(totalpred$prednull, as.numeric(totalpred$outcome), pl=FALSE)
     performancenulldf <- as.data.frame(performancenull)
     performancenulldf <- performancenulldf %>% rownames_to_column("performanceM")
     performancenulldf <- performancenulldf %>% filter(!is.na(performanceM)) ####dit moest ik erbij doen omdat hij om een of andere reden NA's kreeg, omdat er 1 variabele in kolom performanceM NA werd, en die nam hij mee met de Brier. 
@@ -342,8 +341,6 @@ impPerf <- function(impsetspred){
 
 
 performanceimpF <- impPerf(completeF) 
-
-
 
 
 #stack the sets, pool (take average) and transform back.
@@ -471,26 +468,16 @@ Deze resultaten even opslaan:
 saveRDS(finalperformanceF,file=paste0("finalperformanceFsim",".rds"))
 # 
 # total_var_performance_imp #0.01041778 # 0.01059245 ((simulation))
+total_var_performance_impGLM
 ```
 
 
 95% confidence intervals for AUC: 
-```{r}
-#correct (AUC from bootstrap internal validation) (original data) 
-plogis(logit(0.67)-1.96*sqrt(0.01045727))
-plogis(logit(0.67)+1.96*sqrt(0.01045727))
-```
-```{r}
 
-#original (original data) 
-plogis(logit(0.71)-1.96*sqrt(0.01045727))
-plogis(logit(0.71)+1.96*sqrt(0.01045727))
-```
-
-For simualation data: 
+Confidence interval AUC (corrected) 
 ```{r}
-plogis(logit(0.63)-1.96*sqrt(0.01059245))
-plogis(logit(0.63)+1.96*sqrt(0.01059245))
+plogis(logit(0.64)-1.96*sqrt(0.01158976))
+plogis(logit(0.64)+1.96*sqrt(0.01158976))
 ```
 
 ```{r}
@@ -501,7 +488,7 @@ finalmodelimp
 
 ```{r}
 
-Myimp$lpF <- -1.60684935 + 0.02436147*(as.numeric(Myimp$age)) + 0.39068116*(as.numeric(Myimp$comorb_hypertension)) + 0.37620206*(as.numeric(Myimp$dummy_Hblow)) + 0.54483079*(as.numeric(Myimp$gender)) + -0.41904317*(as.numeric(Myimp$transhiatal))
+Myimp$lpGLM <- -2.08216925 + 0.04415418*Myimp$age + 0.43302223*as.numeric(Myimp$comorb_hypertension) + -0.00853947*Myimp$fev1_compl + -0.46331381*as.numeric(Myimp$comorb_dm) + -0.50703939*as.numeric(Myimp$transhiatal) + 0.65085502*as.numeric(Myimp$open) + 0.39126824*as.numeric(Myimp$dummy_Neotx3)
 
 Myimp$pred <- 1/(1+exp(-Myimp$lpF))
 summary(Myimp$pred)

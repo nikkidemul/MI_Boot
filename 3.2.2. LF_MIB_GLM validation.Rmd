@@ -174,6 +174,9 @@ impPerfBS <- function(imputatiesets, bootstrapsets, bsmodels, bsnullmodels){
     modelbslist <- bsmodels[[i]]
     nullmodelbslist <- bsnullmodels[[i]]
     
+    
+    imputatieset$outcome <- as.numeric(imputatieset$outcome)-1
+    
     #then loop within the bootstrap samples lists, using the models and the nullmodels. 
     for(j in 1:length(bootstraplist)){
       bootstrapdf <- bootstraplist[[j]]
@@ -187,15 +190,16 @@ impPerfBS <- function(imputatiesets, bootstrapsets, bsmodels, bsnullmodels){
     c_statlogdf <- c_statlogdf %>% rownames_to_column("performanceM")
     
     #use null models for calculating IPA (bootstrapmodel in bootstrap sample)
+    bootstrapdf$outcome <- as.numeric(bootstrapdf$outcome)-1
     bootstrapdf$prednull <- predict(nullmodelbs, type="response", newdata=bootstrapdf)
-    null <- val.prob(bootstrapdf$prednull, as.numeric(bootstrapdf$outcome)-1, pl=FALSE)
+    null <- val.prob(bootstrapdf$prednull, as.numeric(bootstrapdf$outcome), pl=FALSE)
     performancenulldf <- as.data.frame(null)
     performancenulldf <- performancenulldf %>% rownames_to_column("performanceM")
     performancenulldf <- performancenulldf %>% filter(!is.na(performanceM))
     
     #andere performance measures bootstrapmodels in bootstrapsample 
     # first using val.prob
-    bootstrap <- val.prob(bootstrapdf$pred, as.numeric(bootstrapdf$outcome)-1, pl=FALSE)
+    bootstrap <- val.prob(bootstrapdf$pred, bootstrapdf$outcome, pl=FALSE)
     bootstrapdf2 <- data.frame(bootstrap)
     bootstrapdf2 <- bootstrapdf2 %>% rownames_to_column("performanceM")
     
@@ -218,20 +222,20 @@ impPerfBS <- function(imputatiesets, bootstrapsets, bsmodels, bsnullmodels){
     
     #null model predicted values to calculate IPA later
     imputatieset$prednull <- predict(nullmodelbs, type="response", newdata=imputatieset)
-    null <- val.prob(imputatieset$prednull, as.numeric(imputatieset$outcome)-1, pl=FALSE)
+    null <- val.prob(imputatieset$prednull, as.numeric(imputatieset$outcome), pl=FALSE)
     impnulldf <- as.data.frame(null)
     impnulldf <- impnulldf %>% rownames_to_column("performanceM")
     impnulldf <- impnulldf %>% filter(!is.na(performanceM))
     
     #performance measures using val.prob
-    imp <- val.prob(imputatieset$pred, as.numeric(imputatieset$outcome)-1, pl=FALSE)
+    imp <- val.prob(imputatieset$pred, imputatieset$outcome, pl=FALSE)
     impdf <- data.frame(imp)
     impdf <- impdf %>% rownames_to_column("performanceM")
     
     #performance measures calculated by hand (IPA and O:E)
     add.data.IPAimp <- data.frame(performanceM = "IPA" , imp=(1-((impdf$imp[impdf$performanceM=="Brier"])/(impnulldf$null[impnulldf$performanceM=="Brier"])))) 
     add.data.IPAimplogit <- data.frame(performanceM="logitIPA", imp = logit(as.numeric(add.data.IPAimp$imp)))
-     add.dataOEimp <- data.frame(performanceM = "OE", imp = as.numeric(mean(as.numeric(imputatieset$outcome)))/(mean(imputatieset$pred)))
+     add.dataOEimp <- data.frame(performanceM = "OE", imp = as.numeric(mean(imputatieset$outcome))/(mean(imputatieset$pred)))
     impdf2 <- bind_rows(impdf, c_statlogdfimp, add.data.IPAimp, add.data.IPAimplogit, add.dataOEimp) 
      
     #merge everything together              
@@ -258,14 +262,14 @@ impPerfBS <- function(imputatiesets, bootstrapsets, bsmodels, bsnullmodels){
 testperformanceglm <- impPerfBS(imputatiesets=Final_imp, bootstrapsets=bootstrapsimp, bsmodels=modelsbsimpGLM, bsnullmodels=nullmodelsglm)
 
 #save results
-saveRDS(testperformanceglm, file=paste0("listperformanceglm",".rds"))
+#saveRDS(testperformanceglm, file=paste0("listperformanceglm",".rds"))
 
 
 #unlist to stacked dataframe, which we will need to calculate 95% confidence intervals.  
 performance_rowbindtotalglm <- bind_rows(testperformanceglm) 
 
 #save results
-saveRDS(performance_rowbindtotalglm, file=paste0("performance_rowbindtotalglm",".rds"))
+#saveRDS(performance_rowbindtotalglm, file=paste0("performance_rowbindtotalglm",".rds"))
 
 ```
 
@@ -282,27 +286,23 @@ mean_performanceglm <- mean_performanceglm %>% group_by(performanceM) %>% summar
 mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="logitauc"] <- plogis(mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="logitauc"])
 mean_performanceglm$imp[mean_performanceglm$performanceM=="logitauc"] <- plogis(mean_performanceglm$imp[mean_performanceglm$performanceM=="logitauc"]) 
 
-### OLD SCRIPT FOR REFERENCE IF IT DOES NOT WORK
-# mean_performanceF$plogismeanbs <- plogis(mean_performanceF$bootstrap)
-# mean_performanceF$plogismeanimp <- plogis(mean_performanceF$imp)
-
-saveRDS(mean_performanceglm,file=paste0("meanperformanceglm",".rds"))
+saveRDS(mean_performanceglm,file=paste0("meanperformanceglm20240223",".rds"))
 ```
 
 Calculate optimism correct performance measures (subtract optimism from apparent performance): 
 
 Calibration Intercept: 
 ```{r}
-#
+finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Intercept"] - mean_performanceglm$optimism[mean_performanceglm$performanceM=="Intercept"]
 ```
 Calibration slope: 
 ```{r}
-#
+finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Slope"] - mean_performanceglm$optimism[mean_performanceglm$performanceM=="Slope"]
 ```
 
 Brier: 
 ```{r}
-#
+finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Brier"] - mean_performanceglm$optimism[mean_performanceglm$performanceM=="Brier"]
 ```
 
 
@@ -317,24 +317,27 @@ Concerning the 95% CI's:
 First the calibration intercept and slope percentiles: 
 
 ```{r}
-calibrationglm <- performance_rowbindtotalglm %>% filter(performanceM=="Intercept" | performanceM=="Slope")
-calibrationbsglm <- calibrationglm %>% select(performanceM, bootstrap)
-calibrationimpglm <- calibrationglm %>% select(performanceM, imp) 
-calibrationimpintglm <- calibrationimpglm %>% filter(performanceM=="Intercept")
-calibrationimpSglm <- calibrationimpglm %>% filter(performanceM=="Slope")
-var(calibrationimpintglm$imp) #variance is 0.007103361 --> 0.00795414 in simulation data ### Use this to calculate the confidence intervals, we chose to use percentiles (see below)
+# calibrationglm <- performance_rowbindtotalglm %>% filter(performanceM=="Intercept" | performanceM=="Slope")
+# calibrationbsglm <- calibrationglm %>% select(performanceM, bootstrap)
+# calibrationimpglm <- calibrationglm %>% select(performanceM, imp) 
+# calibrationimpintglm <- calibrationimpglm %>% filter(performanceM=="Intercept")
+# calibrationimpSglm <- calibrationimpglm %>% filter(performanceM=="Slope")
+# var(calibrationimpintglm$imp) #variance is 0.007365044
+# 
+# calibrationbsintglm <- calibrationbsglm %>% filter(performanceM=="Intercept")
+# calibrationbsSglm <- calibrationbsglm %>% filter(performanceM=="Slope")
 ```
 
 For calibration measures we decided to use percentiles surrounding the performance measures. 
 
 ```{r}
-#Intercept
-quantile( calibrationimpintglm$imp, probs = 0.975) #0.2268 ### simulation data: 0.3446226 
-quantile( calibrationimpintglm$imp, probs = 0.025) #-0.1056 ### simulation data: -0.03284604
-
-#Slope
-quantile(calibrationimpSglm$imp, probs=0.975) #1.029 ### simulation data: 0.9185784
-quantile(calibrationimpSglm$imp, probs=0.025) #0.665 ### simulation data: 0.2765723
+# #Intercept
+# quantile( calibrationimpintglm$imp, probs = 0.975) + 0.089851116 
+# quantile( calibrationimpintglm$imp, probs = 0.025) + 0.089851116
+# 
+# #Slope
+# quantile(calibrationimpSglm$imp, probs=0.975) - 0.226800575 
+# quantile(calibrationimpSglm$imp, probs=0.025) - 0.226800575
 
 ```
 
@@ -409,19 +412,19 @@ colnames(IPAse2)[1] <- "se"
 
 IPApunt <- performancelongGLM %>% filter(performanceM=="IPA")
 SEIPA <- rubins_rules_var(estimates=IPApunt$performanceimp, ses=IPAse2$se, n_imputed_sets=10)
-SEIPA # 2.960966e-05 
+SEIPA # 0.0006731391
 
 #then use this value to calculate the confidence intervals 
 
-IPAupperGLM <- -0.03931757 + 1.96*sqrt(SEIPA)
-IPAlowerGLM <- -0.03931757 - 1.96*sqrt(SEIPA)
+IPAupperGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="IPA"] + 1.96*sqrt(SEIPA)
+IPAlowerGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="IPA"] - 1.96*sqrt(SEIPA)
 
 
 #optimism corrected is original value IPA - corrected value IPA, using the same formula to calculate the confidence intervals. 
--0.03931757 - 0.052370279
+correctedIPAGlm <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="IPA"] - mean_performanceglm$optimism[mean_performanceglm$performanceM=="IPA"]
 
--0.09168785 + 1.96*sqrt(SEIPA)
--0.09168785- 1.96*sqrt(SEIPA)
+IPAupperglmC <- correctedIPAGlm + 1.96*sqrt(SEIPA)
+IPAlowerglmC <- correctedIPAGlm - 1.96*sqrt(SEIPA)
 
 ```
 
@@ -466,17 +469,18 @@ colnames(OEse2)[1] <- "se"
 #pool ses using rubins rules
 OEpunt <- performancelongGLM %>% filter(performanceM=="OE")
 SEOE <- rubins_rules_var(estimates=OEpunt$performanceimp, ses=OEse2$se, n_imputed_sets=10)
-SEOE # 2.358013e-07
+SEOE # 3.695909e-05
 
 #calculate confidence intervals: 
-OEupperGLM <- 2.12542358 + 1.96*sqrt(SEOE)
-OElowerGLM <- 2.12542358 - 1.96*sqrt(SEOE)
+OEupperGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="OE"] + 1.96*sqrt(SEOE)
+OEAlowerGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="OE"] - 1.96*sqrt(SEOE)
 
-#corrected for optimism (same method as described for IPA): 
-2.12542358 - -0.001282099
 
-2.126706 + 1.96*sqrt(SEOE)
-2.126706 - 1.96*sqrt(SEOE)
+#optimism corrected is original value OE - corrected value OE, using the same formula to calculate the confidence intervals. 
+correctedOEGlm <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="OE"] - mean_performanceglm$optimism[mean_performanceglm$performanceM=="OE"]
+
+OEupperglmC <- correctedOEGlm + 1.96*sqrt(SEOE)
+OElowerglmC <- correctedOEGlm - 1.96*sqrt(SEOE)
 ```
 
 Repeated this process for the Brier score
@@ -511,12 +515,152 @@ colnames(Brierse2)[1] <- "se"
 
 Brierpunt <- performancelongGLM %>% filter(performanceM=="Brier")
 SEBrier <- rubins_rules_var(estimates=Brierpunt$performanceimp, ses=Brierse2$se, n_imputed_sets=10)
-SEBrier # 5.338393e-05
+SEBrier # 4.877178e-05
 
-BrierupperGLM <- 1.21951010 + 1.96*sqrt(SEBrier)
-BrierlowerGLM <- 1.21951010 - 1.96*sqrt(SEBrier)
+BrierupperGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Brier"] + 1.96*sqrt(SEBrier)
+BrierlowerGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Brier"] - 1.96*sqrt(SEBrier)
+
+
+#optimism corrected is original value Brier - corrected value Brier, using the same formula to calculate the confidence intervals. 
+correctedBrierGlm <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Brier"] - mean_performanceglm$optimism[mean_performanceglm$performanceM=="Brier"]
+
+BrierupperglmC <- correctedBrierGlm + 1.96*sqrt(SEBrier)
+BrierlowerglmC <- correctedBrierGlm - 1.96*sqrt(SEBrier)
 ```
 
+
+```{r}
+# Calibration Intercept
+
+performanceI <- performancelongGLM %>% filter(performanceM=="Intercept") 
+
+getsesI <- function(performancelistbs){
+  selist <- list() 
+  
+  for(i in 1:length(performancelistbs)){
+    performancelist <- performancelistbs[[i]]
+    performancebinded <- bind_rows(performancelist) 
+    
+    performancemeasure <- performancebinded %>% filter(performanceM=="Intercept") 
+   
+    performancemeasure2 <- performancemeasure %>% select(performanceM, bootstrap)
+   
+    upper <- quantile(performancemeasure2$bootstrap, probs=0.975)
+    lower <- quantile(performancemeasure2$bootstrap, probs=0.025)
+    se <- (upper-lower)/3.92
+    selist[[i]] <- se
+  }
+  return(selist)
+}
+
+Ise <- getsesI(performancelistbs=testperformanceglm)
+Ise2 <- bind_rows(Ise)
+colnames(Ise2)[1] <- "se"
+
+Ipoint <- performancelongGLM %>% filter(performanceM=="Intercept")
+SEI <- rubins_rules_var(estimates=Ipoint$performanceimp, ses=Ise2$se, n_imputed_sets=10)
+SEI # 5.338393e-05
+
+IupperGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Intercept"] + 1.96*sqrt(SEI)
+IlowerGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Intercept"] - 1.96*sqrt(SEI)
+
+
+#optimism corrected is original value Intercept - corrected value Intercept, using the same formula to calculate the confidence intervals. 
+correctedIGlm <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Intercept"] - mean_performanceglm$optimism[mean_performanceglm$performanceM=="Intercept"]
+
+IupperglmC <- correctedIGlm + 1.96*sqrt(SEI)
+IlowerglmC <- correctedIGlm - 1.96*sqrt(SEI)
+```
+
+
+```{r}
+# Calibration Slope
+
+performanceSlope <- performancelongGLM %>% filter(performanceM=="Slope") 
+
+getsesSlope <- function(performancelistbs){
+  selist <- list() 
+  
+  for(i in 1:length(performancelistbs)){
+    performancelist <- performancelistbs[[i]]
+    performancebinded <- bind_rows(performancelist) 
+    
+    performancemeasure <- performancebinded %>% filter(performanceM=="Slope") 
+   
+    performancemeasure2 <- performancemeasure %>% select(performanceM, bootstrap)
+   
+    upper <- quantile(performancemeasure2$bootstrap, probs=0.975)
+    lower <- quantile(performancemeasure2$bootstrap, probs=0.025)
+    se <- (upper-lower)/3.92
+    selist[[i]] <- se
+  }
+  return(selist)
+}
+
+Slopese <- getsesSlope(performancelistbs=testperformanceglm)
+Slopese2 <- bind_rows(Slopese)
+colnames(Slopese2)[1] <- "se"
+
+Slopepoint <- performancelongGLM %>% filter(performanceM=="Slope")
+SESlope <- rubins_rules_var(estimates=Slopepoint$performanceimp, ses=Slopese2$se, n_imputed_sets=10)
+SESlope # 5.338393e-05
+
+SlopeupperGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Slope"] + 1.96*sqrt(SESlope)
+SlopelowerGLM <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Slope"] - 1.96*sqrt(SESlope)
+
+
+#optimism corrected is original value Slope - corrected value Slope, using the same formula to calculate the confidence intervals. 
+correctedSlopeGlm <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Slope"] - mean_performanceglm$optimism[mean_performanceglm$performanceM=="Slope"]
+
+SlopeupperglmC <- correctedSlopeGlm + 1.96*sqrt(SESlope)
+SlopelowerglmC <- correctedSlopeGlm - 1.96*sqrt(SESlope)
+```
+
+
+AUC: 
+```{r}
+#corrected
+mean_performanceglm$performanceM <- ifelse(mean_performanceglm$performanceM=="auc", "AUC", mean_performanceglm$performanceM)
+
+correctedAUCglm <- finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="AUC"] - (mean_performanceglm$optimism[mean_performanceglm$performanceM=="AUC"])
+
+
+AUClowerGLM <- plogis(logit(finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="AUC"])-1.96*sqrt(total_var_performance_impGLM))
+AUCupperGLM <- plogis(logit(finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="AUC"])+1.96*sqrt(total_var_performance_impGLM))
+
+AUClowerGLMc <- AUClowerGLM - mean_performanceglm$optimism[mean_performanceglm$performanceM=="AUC"]
+AUCupperGLMc <- AUCupperGLM - mean_performanceglm$optimism[mean_performanceglm$performanceM=="AUC"]
+```
+
+
+Create a table with original performance with upper en lower CI, apparent bootstrap, imp, optimism and corrected. 
+
+```{r}
+performanceM <- c("AUC", "OE", "Intercept", "Slope", "Brier", "IPA")
+original <- c(finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="AUC"], finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="OE"], finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Intercept"], finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Slope"], finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Brier"], finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="IPA"])
+lowerO <- c(AUClowerGLM, OElowerGLM, IlowerGLM, SlopelowerGLM, BrierlowerGLM, IPAlowerGLM)
+upperO <- c(AUCupperGLM, OEupperGLM, IupperGLM, SlopeupperGLM, BrierupperGLM, IPAupperGLM)
+bootstrap <- c(mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="logitauc"], mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="OE"], mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="Intercept"], mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="Slope"], mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="Brier"], mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="IPA"])
+imp <- c(mean_performanceglm$imp[mean_performanceglm=="logitauc"], mean_performanceglm$imp[mean_performanceglm=="OE"], mean_performanceglm$imp[mean_performanceglm=="Intercept"], mean_performanceglm$imp[mean_performanceglm=="Slope"], mean_performanceglm$imp[mean_performanceglm=="Brier"], mean_performanceglm$imp[mean_performanceglm=="IPA"])
+optimism <- c(mean_performanceglm$optimism[mean_performanceglm$performanceM=="AUC"], mean_performanceglm$optimism[mean_performanceglm$performanceM=="OE"], mean_performanceglm$optimism[mean_performanceglm$performanceM=="Intercept"], mean_performanceglm$optimism[mean_performanceglm$performanceM=="Slope"], mean_performanceglm$optimism[mean_performanceglm$performanceM=="Brier"], mean_performanceglm$optimism[mean_performanceglm$performanceM=="IPA"])
+corrected <- c(correctedAUCglm, correctedOEGlm, correctedIGlm, correctedSlopeGlm, correctedBrierGlm, correctedIPAGlm)
+lowerC <- c(AUClowerGLMc, OElowerglmC, IlowerglmC, SlopelowerglmC, BrierlowerglmC, IPAlowerglmC)
+upperC <- c(AUCupperGLMc, OEupperglmC, IupperglmC, SlopeupperglmC, BrierupperglmC, IPAupperglmC)
+
+
+GLMperformancetable <- as.data.frame(cbind(performanceM, original, lowerO, upperO, bootstrap, imp, optimism, corrected, lowerC, upperC))
+GLMperformancetable <- GLMperformancetable %>% mutate(original = as.numeric(original)) %>% mutate(lowerO = as.numeric(lowerO)) %>% mutate(upperO = as.numeric(upperO)) %>% mutate(bootstrap = as.numeric(bootstrap)) %>% mutate(imp = as.numeric(imp)) %>% mutate(optimism = as.numeric(optimism)) %>% mutate(corrected=as.numeric(corrected)) %>% mutate(lowerC = as.numeric(lowerC)) %>% mutate(upperC = as.numeric(upperC))
+
+saveRDS(GLMperformancetable, paste0("GLMperformancetotal", ".rds"))
+#nog even afronden op 2 decimalen
+GLMperformancetable2 <- GLMperformancetable %>%mutate(across(is.numeric, round, digits=2))
+
+saveRDS(GLMperformancetable2, paste0("finalGLMperformance",".rds"))
+```
+
+```{r}
+GLMperformancetable2
+```
 
 
  

@@ -155,7 +155,7 @@ finalmodelimpglm2 <- merge(finalmodelimpglm, standarderrors, by="variable", all.
 #calculate 95% CI 
 finalmodelimpglm3 <- finalmodelimpglm2 
 finalmodelimpglm3$lower <- finalmodelimpglm3$Meancoef - 1.96*sqrt(finalmodelimpglm3$ses)
-finalmodelimpglm3$upper <- finalmodelimpglm3$Meancoef - 1.96*sqrt(finalmodelimpglm3$ses)
+finalmodelimpglm3$upper <- finalmodelimpglm3$Meancoef + 1.96*sqrt(finalmodelimpglm3$ses)
 finalmodelimpglm3$lowerOR <- exp(finalmodelimpglm3$lower)
 finalmodelimpglm3$upperOR <- exp(finalmodelimpglm3$upper)
 
@@ -165,7 +165,7 @@ finalmodelimpglm3 <- finalmodelimpglm3 %>% select(variable, Meancoef, ses, lower
 
 Save file: 
 ```{r}
-saveRDS(finalmodelimpglm3, file=paste0("FinalmodelGLMsim"))
+saveRDS(finalmodelimpglm3, file=paste0("FinalmodelGLMsimp", ".rds"))
 ```
 
 
@@ -187,7 +187,10 @@ predcalc <- function(impsets, finalmodeldf){
     datasetimp <- impsets[[i]]
     
     #we need to set everything to numeric 
+    names <- datasetimp %>% select_if(is.factor)
+    names2 <- colnames(names)
     impsetprep <- datasetimp %>% mutate_if(is.factor, as.numeric)
+    impsetprep <- impsetprep %>% mutate_at(names2, ~ . -1)
     
     #multiply all model coefficients with their respective variable value, not using the intercept variable (-1). 
     impsetprep <- impsetprep %>% mutate(finalmodellp = model_coefs["(Intercept)"] + rowSums(across(all_of(names(model_coefs)[-1]),
@@ -315,13 +318,14 @@ impPerf <- function(impsetspred){
     c_statlogdf <- c_statlogdf %>% rownames_to_column("performanceM")
     
     #calculate other performance statistics using val.prob, storing them as performanceM variable in a separate dataframe. 
-    performanceimp <- val.prob(totalpred$pred, as.numeric(totalpred$outcome)-1, pl=FALSE)
+    totalpred$outcome <- as.numeric(totalpred$outcome)-1
+    performanceimp <- val.prob(totalpred$pred, totalpred$outcome, pl=FALSE)
     performancedf <- data.frame(performanceimp)
     performancedf <- performancedf %>% rownames_to_column("performanceM")
     performancedf <- performancedf %>% filter(!is.na(performanceM))
     
     #calculate performance statistics for the null model in order to calculate IPA further on
-    performancenull <- val.prob(totalpred$prednull, as.numeric(totalpred$outcome)-1, pl=FALSE)
+    performancenull <- val.prob(totalpred$prednull, as.numeric(totalpred$outcome), pl=FALSE)
     performancenulldf <- as.data.frame(performancenull)
     performancenulldf <- performancenulldf %>% rownames_to_column("performanceM")
     performancenulldf <- performancenulldf %>% filter(!is.na(performanceM)) #dit moest ik erbij doen omdat hij om een of andere reden NA's kreeg, omdat er 1 variabele in kolom performanceM NA werd, en die nam hij mee met de Brier. 
@@ -329,7 +333,7 @@ impPerf <- function(impsetspred){
     #now calculate the performance measures that are not returned by val.prop by hand (IPA, OE). We also transformed IPA when we were not yet sure how to pool IPA. 
     add.data.IPA <- data.frame(performanceM = "IPA", performanceimp = 1-((performancedf$performanceimp[performancedf$performanceM=="Brier"])/(performancenulldf$performancenull[performancenulldf$performanceM=="Brier"])))
     add.data.IPA2 <- data.frame(performanceM = "logitIPA", performanceimp=logit(as.numeric(add.data.IPA$performanceimp)))
-    add.data.OE <- data.frame(performanceM = "OE", performanceimp =  (mean((as.numeric(totalpred$outcome)-1)))/(as.numeric(mean(as.numeric(totalpred$pred)))))
+    add.data.OE <- data.frame(performanceM = "OE", performanceimp =  (mean((as.numeric(totalpred$outcome))))/(as.numeric(mean(as.numeric(totalpred$pred)))))
     dfperformance2 <- bind_rows(performancedf, c_statlogdf, add.data.IPA, add.data.IPA2, add.data.OE) #wrap it all toghether                          
     dfperformance3 <- dfperformance2 %>% filter(performanceM=="logitauc"|performanceM=="logit_se"|performanceM=="IPA"|performanceM=="logitIPA"|performanceM=="Slope" | performanceM=="Intercept" | performanceM=="Brier" | performanceM=="OE")
     performancetablesimp[[i]] <- dfperformance3
@@ -393,12 +397,12 @@ plogis(logit(0.71) - 1.96*sqrt(0.01045909))
 plogis(logit(0.71) + 1.96*sqrt(0.01045909))
 
 #simulation data
-plogis(logit(0.63) - 1.96*sqrt(0.0105969))
-plogis(logit(0.63) + 1.96*sqrt(0.0105969))
+plogis(logit(0.67266001) - 1.96*sqrt(0.01158976))
+plogis(logit(0.67266001) + 1.96*sqrt(0.01158976))
 ```
 Save performance output: 
 ```{r}
-saveRDS(finalperformanceGLM, file=paste0("finalappperformanceGLMsim"))
+saveRDS(finalperformanceGLM, file=paste0("finalappperformanceGLM"))
 ```
 
 
@@ -481,7 +485,7 @@ finalmodelimpglm3
 ```{r}
 library(pROC)
 
-Myimp$lpGLM <- 2.22187840	 + 0.03613563*Myimp$age + 0.32613135*as.numeric(Myimp$comorb_hypertension) + -3.07940731*as.numeric(Myimp$eGFR) + -0.01563689*Myimp$fev1_compl + 0.57910986*as.numeric(Myimp$gender) + -0.88026153*as.numeric(Myimp$transhiatal) + 0.49382807*as.numeric(Myimp$smoking)
+Myimp$lpGLM <- -2.122585509	 + 0.044903854*Myimp$age + 0.440467860*as.numeric(Myimp$comorb_hypertension) + -0.008702124*Myimp$fev1_compl + -0.469458773*as.numeric(Myimp$comorb_dm) + -0.514835487*as.numeric(Myimp$transhiatal) + 0.669069750*as.numeric(Myimp$open) + 0.396017816*as.numeric(Myimp$dummy_Neotx3)
 
 Myimp$predGLM <- 1/(1+exp(-Myimp$lpGLM))
 summary(Myimp$predGLM)
@@ -489,8 +493,6 @@ myROC <- roc(Myimp$outcome ~Myimp$lpGLM, levels=c(0,1))
 plot(myROC, xlim=c(1,0))
 auc(myROC)
 ```
-
-
 
 
 
