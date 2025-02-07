@@ -73,7 +73,7 @@ finalmodelrefitglm$variable <- sub("(.*)1$", "\\1", finalmodelrefitglm$variable)
 variablesrefit2glm <- setdiff(finalmodelrefitglm$variable, c("(Intercept)", "fev1_compl"))
 formula_string2glm <- paste("outcome ~", paste(variablesrefit2glm, collapse= "+"))
 
-refitmodels2glm <- refitmodelF(impsets=Final_impF, formula=formula_string2glm)
+refitmodels2glm <- refitmodelglm(impsets=Final_impF, formula=formula_string2glm)
 
 modeldatarefit2glm <- extractmodels(refitmodels2glm)
 modeldatarefitmerged2glm <- bind_rows(modeldatarefit2glm)

@@ -202,6 +202,50 @@ modelglm <- function(bootstrapsets, formula){
   return(modelsbsglm)
 }
 
+# Function for model development in GLM bootstrapped samples: 
+modelglm_pl <- function(bootstrapsets, formula, nr_cores = 1){
+  nrI <- length(bootstrapsets)
+  nrB <- length(bootstrapsets[[1]])
+  print(paste("nr of imputations:", nrI))
+  print(paste("nr of bootstraps:", nrB))
+  
+  cl_parms <- data.frame(nB = 1:nrB)
+  # cl_parms <- merge(cl_parms, data.frame(nI = 1:nrI))
+  cl_parms <- apply(cl_parms, 1, as.list)
+  
+  # bootstrapsets <- lapply(cl_parms, function(ee) bootstrapsets[[ee$nI]][[ee$nB]])
+  # print(pryr::object_size(bootstrapsets))
+  # Sys.info()[["sysname"]] == "Windows" && 
+  cl_modelglm <- NULL
+  on.exit({if(!is.null(cl_modelglm)) stopCluster(cl_modelglm)}, add = TRUE)
+  
+  if(nr_cores > 1){
+    cl_modelglm <- makePSOCKcluster(nr_cores)
+    clusterEvalQ(cl_modelglm, library(stats))
+    clusterExport(cl_modelglm, varlist = "formula", envir = environment())
+  }
+  
+  modelsbsglm = lapply(1:nrI, function(ii){
+    cat(paste("---------- Now at imputation dataset nr:", ii, "-----------\n"))
+    cat("Elapsed time so far:\n")
+    print(Sys.time() - tic)
+    
+    if(nr_cores > 1){
+      print(clusterEvalQ(cl_modelglm, gc()))
+      
+      return(parLapply(cl_modelglm, bootstrapsets[[ii]], function(ee){
+        step(glm(formula, data=ee, family=binomial), direction="backward", trace=0)
+      }))
+    } else {
+      return(map(.progress = TRUE, bootstrapsets[[ii]], function(ee){
+        step(glm(formula, data=ee, family=binomial), direction="backward", trace=0)
+      }))
+    }
+  })
+  
+  return(modelsbsglm)
+}
+
 # calculate performance over the bootstrap models (GLM specific) 
 impPerfBSglm <- function(imputatiesets, bootstrapsets, bsmodels, bsnullmodels){
   

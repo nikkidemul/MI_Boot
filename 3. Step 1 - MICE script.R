@@ -17,7 +17,8 @@ table(mycormatvar >=0.7 | mycormatvar <=-0.7) #so no correlations higher then 0.
 table(mycormatvar >=0.5 | mycormatvar <=-0.5) # so a few are correlated at the 0.5 level, which? 
 
 ###check these correlations in excel
-write.table(mycormatvar, "correlationmatrix.csv", sep=";")
+# write.table(mycormatvar, "correlationmatrix.csv", sep=";")
+View(mycormatvar)
 
 ### the variables correlating > 0.5 are tiffeneau index and fev1 - which you would expect
 
@@ -48,15 +49,16 @@ system.time(imp.dry3 <- mice(incompletedata, meth=mymethod, pred=pred, maxit=0, 
 test3 <- complete(imp.dry3)
 
 #Run final imputation model
-system.time(imputedset <- mice(data=incompletedata, 
-                               m=m, 
-                               maxit=maxit, 
-                               method=mymethod, 
-                               predictorMatrix = pred, 
-                               printFlag=T, 
-                               seed=300, 
-                               post=postproc, 
-                               visitSequence = 'monotone'))
+system.time(
+  imputedset <- mice(data=incompletedata, 
+     m=m, 
+     maxit=maxit, 
+     method=mymethod, 
+     predictorMatrix = pred, 
+     printFlag=T, 
+     seed=300, 
+     post=postproc, 
+     visitSequence = 'monotone'))
 
 
 #Then check your imputations

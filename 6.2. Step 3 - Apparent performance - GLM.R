@@ -68,5 +68,5 @@ Myimp$lpGLM <- -2.72780665 + 0.04244476*Myimp$age + 0.47924375*as.numeric(Myimp$
 Myimp$predGLM <- 1/(1+exp(-Myimp$lpGLM))
 summary(Myimp$predGLM)
 myROC <- roc(Myimp$outcome ~Myimp$lpGLM, levels=c(0,1))
-plot(myROC, xlim=c(1,0))
+par(pty='s'); plot(myROC, xlim=c(1,0)); par(pty='m')
 auc(myROC)

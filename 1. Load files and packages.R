@@ -2,6 +2,7 @@
 
 rm(list=ls())
 
+library(parallel)
 library(logistf)
 library(mice)
 library(tidyverse)

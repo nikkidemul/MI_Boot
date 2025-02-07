@@ -14,25 +14,29 @@ bootstrapsGLM <- lapply(Final_imp, bootstrap, bootstrapn=500)
 # Then, we repeat the model building process from step 2 and step 3 (script 5.2). 
 ### It is important that we use the same technique for the model development in the bootstrap, as in the original data (i imputed datasets). 
 set.seed(21212)
-modelsbsimpGLM <- modelglm(bootstrapsGLM, formula=outcome~age
-                           +bmi
-                           +gender
-                           +open
-                           +transhiatal
-                           +dummy_Neotx1
-                           +dummy_Neotx3
-                           +T34
-                           +comorb_dm
-                           +comorb_cardiovasc
-                           +comorb_hypertension
-                           +smoking
-                           +dummy_ASA34
-                           +eGFR
-                           +dummy_Hblow
-                           +dummy_Hbhigh
-                           +fev1_compl
-                           +tiff_compl) 
-
+tic <- Sys.time()
+modelsbsimpGLM <- modelglm_pl(nr_cores = 4, 
+                              bootstrapsets = bootstrapsGLM, 
+                              formula=outcome~age+
+                                              bmi+
+                                              gender+
+                                              open+
+                                              transhiatal+
+                                              dummy_Neotx1+
+                                              dummy_Neotx3+
+                                              T34+
+                                              comorb_dm+
+                                              comorb_cardiovasc+
+                                              comorb_hypertension+
+                                              smoking+
+                                              dummy_ASA34+
+                                              eGFR+
+                                              dummy_Hblow+
+                                              dummy_Hbhigh+
+                                              fev1_compl+
+                                              tiff_compl)
+toc <- Sys.time()
+print(toc - tic)
 #save results for later use 
 #saveRDS(modelsbsimpGLM,file=paste0("modelsbsGLM",".rds"))
 
@@ -49,7 +53,7 @@ performance_rowbindtotalglm <- bind_rows(testperformanceglm)
 performance_rowbindtotalglm$performanceM <- ifelse(performance_rowbindtotalglm$performanceM == "C (ROC)", "AUC", performance_rowbindtotalglm$performanceM)
 
 # Then we pool the performance measures. For point estimates, we take the average. 
-mean_performanceglm <- performance_rowbindtotalglm %>% group_by(performanceM) %>% summarise(across(where(is.numeric), mean, na.rm=TRUE), .groups="drop")
+mean_performanceglm <- performance_rowbindtotalglm %>% group_by(performanceM) %>% summarise(across(where(is.numeric), \(e) mean(e, na.rm = TRUE)), .groups="drop")
 
 # Then, as for the apparent model performance, we have to transform back the logit AUC  (plogis function). 
 mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="logitauc"] <- plogis(mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="logitauc"])
