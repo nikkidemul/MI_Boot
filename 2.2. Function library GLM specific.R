@@ -203,11 +203,11 @@ modelglm <- function(bootstrapsets, formula){
 }
 
 # Function for model development in GLM bootstrapped samples: 
-modelglm_pl <- function(bootstrapsets, formula, nr_cores = 1){
+modelglm_pl <- function(bootstrapsets, formula, nr_cores = 1, verbose = TRUE){
   nrI <- length(bootstrapsets)
   nrB <- length(bootstrapsets[[1]])
-  print(paste("nr of imputations:", nrI))
-  print(paste("nr of bootstraps:", nrB))
+  if(verbose) print(paste("nr of imputations:", nrI))
+  if(verbose) print(paste("nr of bootstraps:", nrB))
   
   cl_parms <- data.frame(nB = 1:nrB)
   # cl_parms <- merge(cl_parms, data.frame(nI = 1:nrI))
@@ -216,32 +216,34 @@ modelglm_pl <- function(bootstrapsets, formula, nr_cores = 1){
   # bootstrapsets <- lapply(cl_parms, function(ee) bootstrapsets[[ee$nI]][[ee$nB]])
   # print(pryr::object_size(bootstrapsets))
   # Sys.info()[["sysname"]] == "Windows" && 
-  cl_modelglm <- NULL
-  on.exit({if(!is.null(cl_modelglm)) stopCluster(cl_modelglm)}, add = TRUE)
+  
   
   if(nr_cores > 1){
     cl_modelglm <- makePSOCKcluster(nr_cores)
+    on.exit({stopCluster(cl_modelglm); print("Cluster connections closed")}, add = TRUE)
     clusterEvalQ(cl_modelglm, library(stats))
     clusterExport(cl_modelglm, varlist = "formula", envir = environment())
   }
-  
-  modelsbsglm = lapply(1:nrI, function(ii){
-    cat(paste("---------- Now at imputation dataset nr:", ii, "-----------\n"))
-    cat("Elapsed time so far:\n")
-    print(Sys.time() - tic)
-    
+  .tic <- Sys.time()
+  modelsbsglm <- vector(mode = "list", length = nrI)
+  on.exit(return(modelsbsglm), add = TRUE)
+  for (ii in 1:nrI){
     if(nr_cores > 1){
-      print(clusterEvalQ(cl_modelglm, gc()))
+      if(verbose) cat(paste("------------ Now at imputation dataset nr:", ii, "---------------\n"))
       
-      return(parLapply(cl_modelglm, bootstrapsets[[ii]], function(ee){
+      modelsbsglm[[ii]] <- parLapplyLB(cl_modelglm, bootstrapsets[[ii]], function(ee){
         step(glm(formula, data=ee, family=binomial), direction="backward", trace=0)
-      }))
+      })
+      .toc <- Sys.time()
+      if(verbose) cat("Elapsed time so far:", format(difftime(.toc, .tic)), "\n")
+      if(verbose) cat("ETA:", format(.tic + difftime(.toc + (nrI-ii)*difftime(.toc, .tic)/ii, .tic)), "\n")
+      if(verbose) print(clusterEvalQ(cl_modelglm, gc()))
     } else {
-      return(map(.progress = TRUE, bootstrapsets[[ii]], function(ee){
+      modelsbsglm[[ii]] <- map(.progress = TRUE, bootstrapsets[[ii]], function(ee){
         step(glm(formula, data=ee, family=binomial), direction="backward", trace=0)
-      }))
+      })
     }
-  })
+  }
   
   return(modelsbsglm)
 }

@@ -15,7 +15,7 @@ bootstrapsGLM <- lapply(Final_imp, bootstrap, bootstrapn=500)
 ### It is important that we use the same technique for the model development in the bootstrap, as in the original data (i imputed datasets). 
 set.seed(21212)
 tic <- Sys.time()
-modelsbsimpGLM <- modelglm_pl(nr_cores = 4, 
+modelsbsimpGLM <- modelglm_pl(nr_cores = 2, 
                               bootstrapsets = bootstrapsGLM, 
                               formula=outcome~age+
                                               bmi+
@@ -37,6 +37,7 @@ modelsbsimpGLM <- modelglm_pl(nr_cores = 4,
                                               tiff_compl)
 toc <- Sys.time()
 print(toc - tic)
+print(Sys.time())
 #save results for later use 
 #saveRDS(modelsbsimpGLM,file=paste0("modelsbsGLM",".rds"))
 
