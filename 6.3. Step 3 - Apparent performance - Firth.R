@@ -12,7 +12,7 @@ impsetspredF <- predcalcF(Final_impF, finalmodelF)
 nullmodelsF <- nullmodels(Final_impF) 
 
 # Extract null models from the output generated above: 
-nulldataF <- extractmodels(nullmodelsF)
+nulldataF <- extractmodelsF(nullmodelsF)
 
 # Summarise the results into a long format dataframe: 
 nulldatamergeF <- bind_rows(nulldataF)

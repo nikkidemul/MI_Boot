@@ -213,7 +213,7 @@ AUCupperGLMc <- AUCupperGLM - mean_performanceglm$optimism[mean_performanceglm$p
 # Then we create the final performance table as output, combining all the above calculated measures. 
 
 performanceM <- c("AUC", "OE", "Intercept", "Slope", "Brier", "BrierR", "IPA")
-original <- c(finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="AUC"], 
+apparent <- c(finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="AUC"], 
               finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="OE"], 
               finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Intercept"], 
               finalperformanceGLM$Meanperformance[finalperformanceGLM$performanceM=="Slope"], 
@@ -241,7 +241,7 @@ bootstrap <- c(mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="
                mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="Brier"], 
                mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="BrierR"], 
                mean_performanceglm$bootstrap[mean_performanceglm$performanceM=="IPA"])
-imp <- c(mean_performanceglm$imp[mean_performanceglm=="logitauc"], 
+test <- c(mean_performanceglm$imp[mean_performanceglm=="logitauc"], 
          mean_performanceglm$imp[mean_performanceglm=="OE"], 
          mean_performanceglm$imp[mean_performanceglm=="Intercept"], 
          mean_performanceglm$imp[mean_performanceglm=="Slope"], 
@@ -278,8 +278,8 @@ upperC <- c(AUCupperGLMc,
             IPAupperglmC)
 
 
-GLMperformancetable <- as.data.frame(cbind(performanceM, original, lowerO, upperO, bootstrap, imp, optimism, corrected, lowerC, upperC))
-GLMperformancetable <- GLMperformancetable %>% mutate(original = as.numeric(original)) %>% mutate(lowerO = as.numeric(lowerO)) %>% mutate(upperO = as.numeric(upperO)) %>% mutate(bootstrap = as.numeric(bootstrap)) %>% mutate(imp = as.numeric(imp)) %>% mutate(optimism = as.numeric(optimism)) %>% mutate(corrected=as.numeric(corrected)) %>% mutate(lowerC = as.numeric(lowerC)) %>% mutate(upperC = as.numeric(upperC))
+GLMperformancetable <- as.data.frame(cbind(performanceM, apparent, lowerO, upperO, bootstrap, test, optimism, corrected, lowerC, upperC))
+GLMperformancetable <- GLMperformancetable %>% mutate(apparent = as.numeric(apparent)) %>% mutate(lowerO = as.numeric(lowerO)) %>% mutate(upperO = as.numeric(upperO)) %>% mutate(bootstrap = as.numeric(bootstrap)) %>% mutate(test = as.numeric(test)) %>% mutate(optimism = as.numeric(optimism)) %>% mutate(corrected=as.numeric(corrected)) %>% mutate(lowerC = as.numeric(lowerC)) %>% mutate(upperC = as.numeric(upperC))
 
 #saveRDS(GLMperformancetable, paste0("totalGLMperformance", ".rds"))
 

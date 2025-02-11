@@ -22,7 +22,7 @@ backwardimpF <- function(impsets, formula){
 }
 
 #function to extract the models from the above generated output (i models for i imputation sets)
-extractmodels <- function(modelimplist){
+extractmodelsF <- function(modelimplist){
   
   #store output 
   listmodeldfs <- list()
