@@ -34,4 +34,3 @@ library(rms)
 ##### and Firth's penalized logistic regression. Functions used can be found in the corresponding function library's. 
 ### In 6.1 - 6.2, apparent peformance of the final models formulated in 5.x is estimated for respectively PSFMI, GLM and Firth. 
 ### In 7.1 - 7.3, the bootstrap procedure and calculation of optimism of performance measure can be found, for (again) respectively PSFMI, GLM and Firth. 
-

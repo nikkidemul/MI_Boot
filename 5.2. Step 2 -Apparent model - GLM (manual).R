@@ -73,7 +73,7 @@ finalmodelrefitglm$variable <- sub("(.*)1$", "\\1", finalmodelrefitglm$variable)
 variablesrefit2glm <- setdiff(finalmodelrefitglm$variable, c("(Intercept)", "fev1_compl"))
 formula_string2glm <- paste("outcome ~", paste(variablesrefit2glm, collapse= "+"))
 
-refitmodels2glm <- refitmodelglm(impsets=Final_impF, formula=formula_string2glm)
+refitmodels2glm <- refitmodelglm(impsets=Final_imp, formula=formula_string2glm)
 
 modeldatarefit2glm <- extractmodels(refitmodels2glm)
 modeldatarefitmerged2glm <- bind_rows(modeldatarefit2glm)
@@ -97,15 +97,22 @@ finalmodelrefit2glm
 finalmodelglm <- finalmodelrefit2glm
 
 #calculate 95% CI 
-finalmodelglm$lower <- finalmodelglm$Meancoef - 1.96*sqrt(finalmodelglm$var)
-finalmodelglm$upper <- finalmodelglm$Meancoef + 1.96*sqrt(finalmodelglm$var)
-finalmodelglm$OR <- exp(finalmodelglm$Meancoef) 
-finalmodelglm$lowerOR <- exp(finalmodelglm$lower)
-finalmodelglm$upperOR <- exp(finalmodelglm$upper)
+#first get degrees of freedom for particular dataset, you can extract these from the modeloutput. We use the output of model 1 for this, but you can take any 
+### of the models fitted to extract the degrees of freedom. In our example it is 612. 
+df <- summary(refitmodels2glm[[1]])$df[2]
+### or calculate them by using total sample size - number of predictors - 1 --> in our case : 619 - 6 predictors - 1 = 612. 
+
 finalmodelglm$se <- sqrt(finalmodelglm$var)
+finalmodelglm$lower <- finalmodelglm$Meancoef - (qt(0.975, df)*finalmodelglm$se)
+finalmodelglm$upper <- finalmodelglm$Meancoef + (qt(0.975, df)*finalmodelglm$se)
+finalmodelglm$OR <- exp(finalmodelglm$Meancoef) 
+finalmodelglm$lowerOR <- exp(finalmodelglm$Meancoef - (qt(0.975, df)*finalmodelglm$se))
+finalmodelglm$upperOR <- exp(finalmodelglm$Meancoef + (qt(0.975, df)*finalmodelglm$se))
+
 
 #change order of variables to be able to compare model output: 
 finalmodelglm <- finalmodelglm %>% select(variable, Meancoef, se, lower, upper, OR, lowerOR, upperOR, p)
 finalmodelglm
 
+saveRDS(finalmodelglm, paste0("finalmodelglm", ".rds"))
 

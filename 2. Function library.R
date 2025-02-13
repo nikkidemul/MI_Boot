@@ -51,7 +51,7 @@ rubins_rules_var <- function(estimates, ses, n_imputed_sets){
   #between study variance
   theta_bar <- mean(estimates)
   
-  between_var <- sum( (estimates - theta_bar)^2)/n_imputed_sets
+  between_var <- sum( (estimates - theta_bar)^2)/(n_imputed_sets-1)
   
   #total variance
   total_var <- within_var + between_var + between_var/n_imputed_sets 

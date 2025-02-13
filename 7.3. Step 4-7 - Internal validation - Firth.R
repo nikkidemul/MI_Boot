@@ -9,7 +9,7 @@ bootstrapsimpF <- lapply(Final_impF, bootstrap, bootstrapn=50)
 # Save results: 
 #saveRDS(bootstrapsimpF, file=paste0("bootstrapsimpF", ".rds"))
 
-# Then, we repeat the model building proces from step 2 and 3 in the manuscript (script 5.2.).
+# Then, we repeat the model building process from step 2 and 3 in the manuscript (script 5.2.).
 ### It is important that we use the same technique for the model development in the bootstrap, as in the original data (i imputed datasets). 
 
 set.seed(21212)
@@ -213,7 +213,7 @@ AUCupperFC <- AUCupperF - mean_performanceF$optimism[mean_performanceF$performan
 # Then we create the final performance table as output, combining all the above calculated measures. 
 
 performanceM <- c("AUC", "OE", "Intercept", "Slope", "Brier", "BrierR", "IPA")
-original <- c(finalperformanceF$Meanperformance[finalperformanceF$performanceM=="AUC"], 
+apparent <- c(finalperformanceF$Meanperformance[finalperformanceF$performanceM=="AUC"], 
               finalperformanceF$Meanperformance[finalperformanceF$performanceM=="OE"], 
               finalperformanceF$Meanperformance[finalperformanceF$performanceM=="Intercept"], 
               finalperformanceF$Meanperformance[finalperformanceF$performanceM=="Slope"], 
@@ -241,7 +241,7 @@ bootstrap <- c(mean_performanceF$bootstrap[mean_performanceF$performanceM=="logi
                mean_performanceF$bootstrap[mean_performanceF$performanceM=="Brier"], 
                mean_performanceF$bootstrap[mean_performanceF$performanceM=="BrierR"],
                mean_performanceF$bootstrap[mean_performanceF$performanceM=="IPA"])
-imp <- c(mean_performanceF$imp[mean_performanceF=="logitauc"], 
+test <- c(mean_performanceF$imp[mean_performanceF=="logitauc"], 
          mean_performanceF$imp[mean_performanceF=="OE"], 
          mean_performanceF$imp[mean_performanceF=="Intercept"], 
          mean_performanceF$imp[mean_performanceF=="Slope"], 
@@ -278,8 +278,8 @@ upperC <- c(AUCupperFC,
             IPAupperFC)
 
 
-Fperformancetable <- as.data.frame(cbind(performanceM, original, lowerO, upperO, bootstrap, imp, optimism, corrected, lowerC, upperC))
-Fperformancetable <- Fperformancetable %>% mutate(original = as.numeric(original)) %>% mutate(lowerO = as.numeric(lowerO)) %>% mutate(upperO = as.numeric(upperO)) %>% mutate(bootstrap = as.numeric(bootstrap)) %>% mutate(imp = as.numeric(imp)) %>% mutate(optimism = as.numeric(optimism)) %>% mutate(corrected=as.numeric(corrected)) %>% mutate(lowerC = as.numeric(lowerC)) %>% mutate(upperC = as.numeric(upperC))
+Fperformancetable <- as.data.frame(cbind(performanceM, apparent, lowerO, upperO, bootstrap, test, optimism, corrected, lowerC, upperC))
+Fperformancetable <- Fperformancetable %>% mutate(apparent = as.numeric(apparent)) %>% mutate(lowerO = as.numeric(lowerO)) %>% mutate(upperO = as.numeric(upperO)) %>% mutate(bootstrap = as.numeric(bootstrap)) %>% mutate(test = as.numeric(test)) %>% mutate(optimism = as.numeric(optimism)) %>% mutate(corrected=as.numeric(corrected)) %>% mutate(lowerC = as.numeric(lowerC)) %>% mutate(upperC = as.numeric(upperC))
 
 #saveRDS(Fperformancetable, paste0("totalperformanceFirth_bs", ".rds"))
 

@@ -137,7 +137,7 @@ impPerfGLM <- function(impsetspred){
     performancenull <- val.prob(totalpred$prednull, as.numeric(totalpred$outcome), pl=FALSE)
     performancenulldf <- as.data.frame(performancenull)
     performancenulldf <- performancenulldf %>% rownames_to_column("performanceM")
-    performancenulldf <- performancenulldf %>% filter(!is.na(performanceM)) #dit moest ik erbij doen omdat hij om een of andere reden NA's kreeg, omdat er 1 variabele in kolom performanceM NA werd, en die nam hij mee met de Brier. 
+    performancenulldf <- performancenulldf %>% filter(!is.na(performanceM)) 
     
     #now calculate the performance measures that are not returned by val.prop by hand (IPA, OE). We also transformed IPA when we were not yet sure how to pool IPA. 
     add.data.IPA <- data.frame(performanceM = "IPA", performanceimp = 1-((performancedf$performanceimp[performancedf$performanceM=="Brier"])/(performancenulldf$performancenull[performancenulldf$performanceM=="Brier"])))

@@ -23,7 +23,7 @@ modelsF <- backwardimpF(impsets=Final_impF, formula=outcome~age+
                          tiff_compl)
 
 #get the modeldata (variables selected and their coefficients and standard errors) from the list with models 
-modeldata <- extractmodels(modelsF)
+modeldata <- extractmodelsF(modelsF)
 
 #first create long dataframe 
 modeldatamerged <- bind_rows(modeldata)
@@ -39,7 +39,7 @@ formula_string <- paste("outcome ~", paste(variablesrefit, collapse= "+"))
 refitmodels <- refitmodelF(impsets=Final_impF, formula=formula_string)
 
 #extract the refitted models as above: 
-modeldatarefit <- extractmodels(refitmodels)
+modeldatarefit <- extractmodelsF(refitmodels)
 modeldatarefitmerged <- bind_rows(modeldatarefit)
 
 #summarise the results: 
@@ -67,7 +67,7 @@ formula_string2 <- paste("outcome ~", paste(variablesrefit2, collapse= "+"))
 
 refitmodels2 <- refitmodelF(impsets=Final_impF, formula=formula_string2)
 
-modeldatarefit2 <- extractmodels(refitmodels2)
+modeldatarefit2 <- extractmodelsF(refitmodels2)
 modeldatarefitmerged2 <- bind_rows(modeldatarefit2)
 
 finalmodelrefit2 <- modeldatarefitmerged2 %>% group_by(variable) %>% summarise(Meancoef=mean(modeli.coefficients))
@@ -89,15 +89,22 @@ finalmodelrefit2
 
 finalmodelF <- finalmodelrefit2
 
-#calculate 95% CI 
-finalmodelF$lower <- finalmodelF$Meancoef - 1.96*sqrt(finalmodelF$var)
-finalmodelF$upper <- finalmodelF$Meancoef + 1.96*sqrt(finalmodelF$var)
-finalmodelF$OR <- exp(finalmodelF$Meancoef)
-finalmodelF$lowerOR <- exp(finalmodelF$lower)
-finalmodelF$upperOR <- exp(finalmodelF$upper)
+# For Firth, we calculate the DF by using the total sample size and subtract the number of predictors, -1 --> 619 - 6 - 1 = 612 
+dfF <- 612
+
 finalmodelF$se <- sqrt(finalmodelF$var)
+finalmodelF$lower <- finalmodelF$Meancoef - (qt(0.975, dfF)*finalmodelF$se)
+finalmodelF$upper <- finalmodelF$Meancoef + (qt(0.975, dfF)*finalmodelF$se)
+finalmodelF$OR <- exp(finalmodelF$Meancoef)
+finalmodelF$lowerOR <- exp(finalmodelF$Meancoef - (qt(0.975, dfF)*finalmodelF$se))
+finalmodelF$upperOR <- exp(finalmodelF$Meancoef + (qt(0.975, dfF)*finalmodelF$se))
+
 
 #change order of variables to be able to compare model output: 
 finalmodelF <- finalmodelF %>% select(variable, Meancoef, se, lower, upper, OR, lowerOR, upperOR, p)
 finalmodelF
+
+
+saveRDS(finalmodelF, paste0("finalmodelF", ".rds"))
+
 

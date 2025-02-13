@@ -1,21 +1,31 @@
 ### 7.1. PSFMI VALIDATION ### 
 
-# For PSFMI, we take the final model from script 5.1. 
-modelD1_back$RR_model_final
-
-# We select the variables from this model to do internal validation of that specific model. 
-# The selected variables were: age, open, transhiatal, dummy_Neotx3, comorb_dm, comorb_hypertension
+# For PSFMI, the script is as follows: 
 
 # Name this final model, the final model: 
-finalmodelPSFMI <- psfmi_lr(data=Myimp, nimp=10, impvar=".imp", Outcome="outcome", predictors=c("age", 
-                                                                                           "open", 
-                                                                                           "transhiatal", 
-                                                                                           "dummy_Neotx3", 
-                                                                                           "comorb_dm",  
-                                                                                           "comorb_hypertension"))
+modelvalPSFMI <- psfmi_lr(data=Myimp, nimp=10, impvar=".imp", Outcome="outcome", predictors=c("age", 
+                                                                                              "bmi",
+                                                                                              "gender",
+                                                                                              "open", 
+                                                                                              "transhiatal", 
+                                                                                              "dummy_Neotx1",
+                                                                                              "dummy_Neotx3", 
+                                                                                              "T34",
+                                                                                              "comorb_dm",  
+                                                                                              "comorb_cardiovasc",
+                                                                                              "comorb_hypertension",
+                                                                                              "smoking",
+                                                                                              "dummy_ASA34",
+                                                                                              "eGFR",
+                                                                                              "dummy_Hblow",
+                                                                                              "dummy_Hbhigh",
+                                                                                              "fev1_compl",
+                                                                                              "tiff_compl"))
 # Perform the bootstrap on this final model: 
 set.seed(21212)
-res_bootstrap <- psfmi_validate(finalmodelPSFMI, int_val=TRUE, p.crit=1, nboot=500, val_method="MI_boot", cal.plot=TRUE, plot.indiv=FALSE)
+res_bootstrap <- psfmi_validate(modelvalPSFMI, int_val=TRUE, p.crit=0.157, direction="BW", nboot=500, val_method="MI_boot", cal.plot=TRUE, plot.indiv=FALSE)
 
 # Read the results: 
 res_bootstrap$stats_val
+
+
