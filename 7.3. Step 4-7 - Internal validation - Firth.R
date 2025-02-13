@@ -4,7 +4,7 @@
 
 # First perform the bootstrap
 set.seed(21212)
-bootstrapsimpF <- lapply(Final_impF, bootstrap, bootstrapn=500)
+bootstrapsimpF <- lapply(Final_impF, bootstrap, bootstrapn=50)
 
 # Save results: 
 #saveRDS(bootstrapsimpF, file=paste0("bootstrapsimpF", ".rds"))
@@ -13,7 +13,7 @@ bootstrapsimpF <- lapply(Final_impF, bootstrap, bootstrapn=500)
 ### It is important that we use the same technique for the model development in the bootstrap, as in the original data (i imputed datasets). 
 
 set.seed(21212)
-modelsbsimpF <- lapply(bootstrapsimpF, backwardimpF, formula=outcome~age+
+modelsbsimpF <- map(.progress = TRUE, bootstrapsimpF, backwardimpF, formula=outcome~age+
                          open+
                          T34+
                          dummy_Neotx1+
