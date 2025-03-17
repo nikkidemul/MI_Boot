@@ -3,8 +3,8 @@
 # In this script, we will perform the internal validation of the model obtained in script 5.3. using bootstrapping (500 bootstraps).
 
 # First perform the bootstrap
-set.seed(21212)
-bootstrapsimpF <- lapply(Final_impF, bootstrap, bootstrapn=50)
+if(MIb.seed) set.seed(21212)
+bootstrapsimpF <- lapply(Final_impF, bootstrap, bootstrapn=MIb.Nboot)
 
 # Save results: 
 #saveRDS(bootstrapsimpF, file=paste0("bootstrapsimpF", ".rds"))
@@ -12,7 +12,9 @@ bootstrapsimpF <- lapply(Final_impF, bootstrap, bootstrapn=50)
 # Then, we repeat the model building process from step 2 and 3 in the manuscript (script 5.2.).
 ### It is important that we use the same technique for the model development in the bootstrap, as in the original data (i imputed datasets). 
 
-set.seed(21212)
+if(MIb.seed) set.seed(21212)
+cat("\nRunning MI-Boot...\n")
+tic <- Sys.time()
 modelsbsimpF <- map(.progress = TRUE, bootstrapsimpF, backwardimpF, formula=outcome~age+
                          open+
                          T34+
@@ -31,7 +33,7 @@ modelsbsimpF <- map(.progress = TRUE, bootstrapsimpF, backwardimpF, formula=outc
                          dummy_Neotx3+
                          bmi+
                          tiff_compl)
-
+print(Sys.time() - tic)
 # Then we develop the null models over the boostrap samples as we did for the apparent model: 
 nullmodelsF <- lapply(bootstrapsimpF, nullmodels)
 
@@ -81,6 +83,7 @@ colnames(IPAse2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 IPApoint <- performancelongF %>% filter(performanceM=="IPA")
+## >>>> See before: hard code 10?
 SEIPA <- sqrt(rubins_rules_var(estimates=IPApoint$performanceimp, ses=IPAse2$se, n_imputed_sets=10))
 
 ### Calculate the confidence intervals
@@ -101,6 +104,7 @@ colnames(OEse2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 OEpoint <- performancelongF %>% filter(performanceM=="OE")
+## >>>> See before: hard code 10?
 SEOE <- sqrt(rubins_rules_var(estimates=OEpoint$performanceimp, ses=OEse2$se, n_imputed_sets=10))
 
 ### Calculate the confidence intervals
@@ -121,6 +125,7 @@ colnames(Brierse2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 Brierpoint <- performancelongF %>% filter(performanceM=="Brier")
+## >>>> See before: hard code 10?
 SEBrier <- sqrt(rubins_rules_var(estimates=Brierpoint$performanceimp, ses=Brierse2$se, n_imputed_sets=10))
 
 ### Calculate the confidence intervals
@@ -141,6 +146,7 @@ colnames(BrierRse2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 BrierRpoint <- performancelongF %>% filter(performanceM=="BrierR")
+## >>>> See before: hard code 10?
 SEBrierR <- sqrt(rubins_rules_var(estimates=BrierRpoint$performanceimp, ses=BrierRse2$se, n_imputed_sets=10))
 
 ### Calculate the confidence intervals
@@ -160,6 +166,7 @@ colnames(Ise2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 Ipoint <- performancelongF %>% filter(performanceM=="Intercept")
+## >>>> See before: hard code 10?
 SEI <- sqrt(rubins_rules_var(estimates=Ipoint$performanceimp, ses=Ise2$se, n_imputed_sets=10))
 
 ### Calculate the confidence intervals
@@ -180,6 +187,7 @@ colnames(Slopese2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 Slopepoint <- performancelongF %>% filter(performanceM=="Slope")
+## >>>> See before: hard code 10?
 SESlope <- sqrt(rubins_rules_var(estimates=Slopepoint$performanceimp, ses=Slopese2$se, n_imputed_sets=10))
 
 ### Calculate the confidence intervals
@@ -234,7 +242,8 @@ upperO <- c(AUCupperF,
             BrierupperF, 
             BrierRupperF, 
             IPAupperF)
-bootstrap <- c(mean_performanceF$bootstrap[mean_performanceF$performanceM=="logitauc"], 
+## >>>> this bootstrap was overwriting the function
+bootstrp <- c(mean_performanceF$bootstrap[mean_performanceF$performanceM=="logitauc"], 
                mean_performanceF$bootstrap[mean_performanceF$performanceM=="OE"], 
                mean_performanceF$bootstrap[mean_performanceF$performanceM=="Intercept"], 
                mean_performanceF$bootstrap[mean_performanceF$performanceM=="Slope"], 
@@ -278,18 +287,30 @@ upperC <- c(AUCupperFC,
             IPAupperFC)
 
 
-Fperformancetable <- as.data.frame(cbind(performanceM, apparent, lowerO, upperO, bootstrap, test, optimism, corrected, lowerC, upperC))
-Fperformancetable <- Fperformancetable %>% mutate(apparent = as.numeric(apparent)) %>% mutate(lowerO = as.numeric(lowerO)) %>% mutate(upperO = as.numeric(upperO)) %>% mutate(bootstrap = as.numeric(bootstrap)) %>% mutate(test = as.numeric(test)) %>% mutate(optimism = as.numeric(optimism)) %>% mutate(corrected=as.numeric(corrected)) %>% mutate(lowerC = as.numeric(lowerC)) %>% mutate(upperC = as.numeric(upperC))
+Fperformancetable <- as.data.frame(cbind(performanceM, apparent, lowerO, upperO, bootstrp, test, optimism, corrected, lowerC, upperC))
+Fperformancetable <- Fperformancetable %>% 
+  mutate(apparent = as.numeric(apparent)) %>% 
+  mutate(lowerO = as.numeric(lowerO)) %>% 
+  mutate(upperO = as.numeric(upperO)) %>% 
+  mutate(bootstrap = as.numeric(bootstrp)) %>% 
+  select(-bootstrp) %>% 
+  mutate(test = as.numeric(test)) %>% 
+  mutate(optimism = as.numeric(optimism)) %>% 
+  mutate(corrected=as.numeric(corrected)) %>% 
+  mutate(lowerC = as.numeric(lowerC)) %>% 
+  mutate(upperC = as.numeric(upperC))
 
 #saveRDS(Fperformancetable, paste0("totalperformanceFirth_bs", ".rds"))
 
 # Then we round to two decimals to enhance readibility: 
-Fperformancetable2 <- Fperformancetable %>%mutate(across(is.numeric, round, digits=2))
+Fperformancetable2 <- Fperformancetable # %>%mutate(across(is.numeric, round, digits=2))
 
 #saveRDS(Fperformancetable2, paste0("finalperformanceFirth_bs",".rds"))
 
 # Check results: 
-Fperformancetable2
+cat("\nFinal performance table with internally validated measures:\n\n")
+Fperformancetable2 %>% kbl(digits = MIb.digits) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>% print
 
 # Interpretation: 
 # As discussed in the manuscript: 

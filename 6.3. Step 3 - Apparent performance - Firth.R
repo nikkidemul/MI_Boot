@@ -19,6 +19,7 @@ nulldatamergeF <- bind_rows(nulldataF)
 
 # Summarise the results into a final null model: 
 ### Strictly we don't need to do a majority vote here, but we do want to summarise the results into one final model, for simplicity we therefore used the same function: 
+## >>>> Same about impN as in script 5
 nullmodelimpF <- majorityvote(nulldatamergeF, impN=10, freq=0.5)  
 
 # Create new datasets, including the predicted value of the final model, and the predicted values of the null models: 
@@ -48,7 +49,7 @@ finalperformanceF$performanceM <- ifelse(finalperformanceF$performanceM=="logita
 # We save this calculated variance of the logit AUC to later calculate the confidence intervals surrounding the AUC (for both apparent and adjusted performance). 
 total_var_performance_impF <- rubins_rules_var_auc(estimates=performancelongF$performanceimp[performancelongF$performanceM=="logitauc"], ses=performancelongF$performanceimp[performancelongF$performanceM=="logit_se"], n_imputed_sets=10) #is opgeslagen als totale variantie. 
 
-total_var_performance_impF #0.01037926
+if(MIb.intrnl.verbose) total_var_performance_impF #0.01037926
 
 # Make a calibration plot: 
 outcomestacked <- lapply(impsetspredF, function(x) x%>%select(outcome))
@@ -61,19 +62,22 @@ calibrationplot <- plot_smooth_calibration(x_coordinates=smooth_info$x_coordinat
 #saveRDS(finalperformanceF, file=paste0("FinalperformanceF", ".rds"))
 
 # Make a ROC: 
-finalmodelF
+if(MIb.intrnl.verbose) print(finalmodelF)
 
 # For the ROC we can calculate the predicted values manually as follows: 
+## >>>> This is dangerous ground :) can you refer to a beta vector somewhere?
 Myimp$lpF <- -2.72780665 + 0.04244476*Myimp$age + 0.47924375*as.numeric(Myimp$comorb_hypertension) + 
    -0.41179816*as.numeric(Myimp$comorb_dm) + -0.45425622*as.numeric(Myimp$transhiatal) + 
   0.65301430*as.numeric(Myimp$open) + 0.40846314*as.numeric(Myimp$dummy_Neotx3)
 
 Myimp$predF <- 1/(1+exp(-Myimp$lpF))
-summary(Myimp$predF)
+## >>>> What is this a summary of?
+if(MIb.verbose) cat("\nA summary of ...:\n");print(summary(Myimp$predF))
 
-myROC <- roc(Myimp$outcome ~ Myimp$lpF, levels=c(0,1))
-plot(myROC, xlim=c(1,0)) 
-auc(myROC)
-
+if(MIb.verbose){
+  myROC <- roc(Myimp$outcome ~ Myimp$lpF, levels=c(0,1))
+  par(pty='s'); plot(myROC, xlim=c(1,0)); par(pty='m')
+  auc(myROC)
+}
 
 

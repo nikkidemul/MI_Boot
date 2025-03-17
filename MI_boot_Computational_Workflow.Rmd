@@ -1,0 +1,100 @@
+---
+title: "MI boot for penalized prediction"
+author: "Nikki de Mul"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+MIb.mypath <- '/Users/sbouhad2/MEGA/UMCU dingen/UMCU/DVF/IC/Nikki/incompletedata.rds'
+```
+
+
+# Computational MI-boot workflow for ''How to assess predictive performance in the presence of missing data''
+
+This document contains a centralized workflow to perform MI-boot with GLM or Firth logistic regression. PSFMI is supported as well. 
+
+The repository contains scripts corresponding to step 1 to 7 in the main manuscript. It is structured as follows.
+
+  - The suffixes in the script names correspond to three methods: 
+    1) PSFMI (always denoted as x.1), 
+    2) GLM (manual) unpenalized regression (always denoted as x.2), and 
+    3) Firth's penalized logistic regression (always denoted as x.3). 
+  - The function libraries for the three methods are in script 2., 2.2., and 2.3. Script 2. contains all general functions used in all script from 3.x onwards, and 2.2 and 2.3. contain functions that are specific for the GLM and Firth scenarios. 
+  - In 3. MICE script, script can be found to perform multiple imputation.
+  - In 4. Dataprep, data is prepped to use for further analysis. For PSFMI, GLM (unpenalized logistic regression) and Firth, data should be in slightly different formats. 
+  - In 5.1 - 5.3, apparent model, including variable selection over the imputed datasets is scripted for respectively PSFMI, unpenalized logistic regression using GLM, and Firth's penalized logistic regression. Functions used can be found in the corresponding function library's. 
+  - In 6.1 - 6.2, apparent peformance of the final models formulated in 5.x is estimated for respectively PSFMI, GLM and Firth. 
+  - In 7.1 - 7.3, the bootstrap procedure and calculation of optimism of performance measure can be found, for (again) respectively PSFMI, GLM and Firth. 
+
+
+
+## Step 1: loading files and packages
+
+In step 1, we run script 1. Here, we also set some flags and seeds. We use the prefix MIb for global variables used throughout the scripts. 
+
+```{r step 1}
+MIb.seed <- TRUE                # Use predefined seed everywhere?
+MIb.verbose <- TRUE             # Print relevant output to the screen?
+MIb.save <- FALSE               # Save RDS files of intermediate results?
+MIb.intrnl.verbose <- FALSE     # Print extra output such as checks and iterations?
+source("~/Documents/GitHub/MI_Boot/1. Load files and packages.R")
+
+```
+
+We load our dataset. Now is also the time to make some changes to your dataset if needed. 
+
+```{r load data}
+## Change to match your path
+incompletedata <- readRDS(MIb.mypath) 
+
+### We want to analyze Hb as a categorical variable, so we will make it a categorical variable before the imputation procedure. 
+incompletedata$Hbcat <- as.factor(ifelse(incompletedata$Hemoglobine < 7.5, 1, ifelse(incompletedata$Hemoglobine>8.5,2,0)))
+incompletedata <- incompletedata %>% select(!Hemoglobine)
+```
+
+
+
+Next, read in all functions needed for MI-boot. Add the GLM **or** Firth specific functions if needed (but not both, as they contain duplicate function names). 
+
+```{r step 2}
+source("~/Documents/GitHub/MI_Boot/2. Function library.R")
+source("~/Documents/GitHub/MI_Boot/2.3. Function library Firth specific.R")
+```
+
+Run MICE. Set the MICE parameters here.
+
+```{r step 3}
+MIb.MICE.m <- 10              # Set number of imputed datasets
+MIb.MICE.maxit <- 10          # Set number of iterations in mice
+source("~/Documents/GitHub/MI_Boot/3. Step 1 - MICE script.R")
+if(MIb.verbose) plot(imputedset)
+if(MIb.verbose) densityplot(imputedset)
+```
+
+In script 4, the imputation datasets are processed to match the required input format for the prediction method. The script processes categorical variables into dummy variables, ensures data is in the correct format (long format for PSFMI), and adjusts factor variables for each method's specific requirements. This script should be adapted to your dataset. This should be executed once, after the imputation step. 
+
+```{r step 4}
+# source("~/Documents/GitHub/MI_Boot/4. Dataprep.R")
+```
+
+
+
+```{r step 5}
+source("~/Documents/GitHub/MI_Boot/5.3. Step 2 - Apparent model -Firth.R")
+```
+
+
+```{r step 6}
+source("~/Documents/GitHub/MI_Boot/6.3. Step 3 - Apparent performance - Firth.R")
+```
+
+
+```{r step 7, warning=FALSE, message=FALSE}
+MIb.Nboot <- 2    # Number of bootstrap replicates
+MIb.digits <- 3   # Number of digits to print in the final table
+source("~/Documents/GitHub/MI_Boot/7.3. Step 4-7 - Internal validation - Firth.R")
+
+```
+

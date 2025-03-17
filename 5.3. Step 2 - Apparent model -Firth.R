@@ -1,6 +1,6 @@
 ### 5.3. APPARENT MODEL - FIRTH ###
 
-set.seed(21212)
+if(MIb.seed) set.seed(21212)
 
 #Create i models for each imputed dataset i (in our example: 10 models developed in 10 datasets): 
 modelsF <- backwardimpF(impsets=Final_impF, formula=outcome~age+
@@ -29,7 +29,8 @@ modeldata <- extractmodelsF(modelsF)
 modeldatamerged <- bind_rows(modeldata)
 
 #select the final model variables and coefficients using the majority vote: 
-finalmodelF <- majorityvote(modeldatamerged, impN=10, freq=0.5) 
+## >>>> impN = 10 is hard coded, should it be length(Final_impF)?
+finalmodelF <- majorityvote(modeldatamerged, impN=10, freq=0.5)
 
 #refit the models over all imputed datasets i with these selected variables: 
 variablesrefit <- setdiff(finalmodelF$variable, "(Intercept)")
@@ -59,7 +60,7 @@ finalmodelrefit$W <- (finalmodelrefit$Meancoef^2)/(finalmodelrefit$var)
 finalmodelrefit$p <- 1-pchisq(finalmodelrefit$W, df=1)
 
 #check p-values: 
-finalmodelrefit
+if(MIb.intrnl.verbose) print(finalmodelrefit)
 
 #in our example, fev1_compl can be dropped from the model --> repeat refit. 
 variablesrefit2 <- setdiff(finalmodelrefit$variable, c("(Intercept)", "fev1_compl"))
@@ -84,7 +85,7 @@ finalmodelrefit2$W <- (finalmodelrefit2$Meancoef^2)/(finalmodelrefit2$var)
 finalmodelrefit2$p <- 1-pchisq(finalmodelrefit2$W, df=1)
 
 #check p-values: 
-finalmodelrefit2
+if(MIb.intrnl.verbose) print(finalmodelrefit2)
 # all are p<0.05, this is the final model. 
 
 finalmodelF <- finalmodelrefit2
@@ -102,9 +103,8 @@ finalmodelF$upperOR <- exp(finalmodelF$Meancoef + (qt(0.975, dfF)*finalmodelF$se
 
 #change order of variables to be able to compare model output: 
 finalmodelF <- finalmodelF %>% select(variable, Meancoef, se, lower, upper, OR, lowerOR, upperOR, p)
-finalmodelF
+if(MIb.verbose) cat("\nFinal model:\n"); print(finalmodelF)
 
-
-saveRDS(finalmodelF, paste0("finalmodelF", ".rds"))
+if(MIb.save) saveRDS(finalmodelF, paste0("finalmodelF", ".rds"))
 
 

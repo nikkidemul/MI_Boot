@@ -1,6 +1,7 @@
 ### Load files and packages ###
 
-rm(list=ls())
+# rm(list=ls()) # Preferrably start with a clean workspace
+gc()
 
 library(parallel)
 library(logistf)
@@ -22,6 +23,8 @@ library(mice)
 library(tibble)
 library(pROC)
 library(rms)
+library(kableExtra)
+# library(knitrProgressBar)
 
 #The script is structured as follows: 
 ### Three scenario's are provided: PSFMI (always denoted as x.1), GLM (manual) unpenalized regression (always denoted as x.2), 

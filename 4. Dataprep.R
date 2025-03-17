@@ -7,7 +7,7 @@
 Myimp <- as.data.frame(complete(imputedset, action="long"))
 
 #dummy_Neotx
-table(Myimp$Neotx)
+if(MIb.verbose) table(Myimp$Neotx)
 Myimp <- Myimp %>% mutate(dummy_Neotx1 = ifelse(Neotx==1,1,0)) %>% mutate(dummy_Neotx3 = ifelse(Neotx==3,1,0)) %>% mutate(dummy_Neotx1 = as.factor(dummy_Neotx1)) %>% mutate(dummy_Neotx3 = as.factor(dummy_Neotx3))
 
 #eGFRcat
@@ -97,5 +97,5 @@ Final_impF <- as.mids(Myimp3, where=NULL, .imp=".imp", .id=".id")
 
 Final_impF <- complete(Final_impF, "all")
 
-#saveRDS(Final_impF, file=paste0("Final_impF", ".rds"))
+if(MIb.save) saveRDS(Final_impF, file=paste0("Final_impF", ".rds"))
 

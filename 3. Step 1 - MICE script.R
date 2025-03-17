@@ -1,11 +1,7 @@
 ### 3. MULTIPLE IMPUTATION SCRIPT ###
 
-### We want to analyze Hb as a categorical variable, so we will make it a categorical variable before the imputation procedure. 
-incompletedata$Hbcat <- as.factor(ifelse(incompletedata$Hemoglobine < 7.5, 1, ifelse(incompletedata$Hemoglobine>8.5,2,0)))
-incompletedata <- incompletedata %>% select(!Hemoglobine)
-
 # steps towards multiple imputation
-set.seed(600)
+if(MIb.seed) set.seed(600)
 system.time(imp.dry <- mice(incompletedata, maxit=0, printFlag=TRUE, visitsequence='monotone', seed=300))
 testimp <- complete(imp.dry)
 
@@ -18,12 +14,12 @@ table(mycormatvar >=0.5 | mycormatvar <=-0.5) # so a few are correlated at the 0
 
 ###check these correlations in excel
 # write.table(mycormatvar, "correlationmatrix.csv", sep=";")
-View(mycormatvar)
+if(MIb.verbose) View(mycormatvar)
 
 ### the variables correlating > 0.5 are tiffeneau index and fev1 - which you would expect
 
 mymethod <- imp.dry$method
-mymethod #check whether all variables are imputed accordingly
+if(MIb.intrnl.verbose) print(mymethod)  #check whether all variables are imputed accordingly
 
 #then continue by defining which variables are contributing to the prediction model and post processing if applicable. 
 
@@ -42,29 +38,26 @@ postproc <- imp.dry2$post
 postproc["fev1_compl"] <- "imp[[j]][,i] <- squeeze(imp[[j]][,i],c(60,150))"
 postproc["tiff_compl"] <- "imp[[j]][,i] <- squeeze(imp[[j]][,i],c(60,150))"
 
-m <- 10
-maxit <- 10 
-
 system.time(imp.dry3 <- mice(incompletedata, meth=mymethod, pred=pred, maxit=0, printFlag=T, visitSequence = 'monotone', seed=300))
 test3 <- complete(imp.dry3)
 
 #Run final imputation model
-system.time(
-  imputedset <- mice(data=incompletedata, 
-     m=m, 
-     maxit=maxit, 
-     method=mymethod, 
-     predictorMatrix = pred, 
-     printFlag=T, 
-     seed=300, 
-     post=postproc, 
-     visitSequence = 'monotone'))
-
+if(MIb.verbose) tic <- Sys.time()
+imputedset <- mice(data=incompletedata, 
+   m=MIb.MICE.m, 
+   maxit=MIb.MICE.maxit, 
+   method=mymethod, 
+   predictorMatrix = pred, 
+   print=MIb.intrnl.verbose, 
+   seed=300, 
+   post=postproc, 
+   visitSequence = 'monotone')
+if(MIb.verbose) cat("\nMICE imputation completed: ")
+if(MIb.verbose) print(Sys.time() - tic)
 
 #Then check your imputations
-plot(imputedset)
-
-densityplot(imputedset)
+if(MIb.verbose) plot(imputedset)
+if(MIb.verbose) densityplot(imputedset)
 
 
 
