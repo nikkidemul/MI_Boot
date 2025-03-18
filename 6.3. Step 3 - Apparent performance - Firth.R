@@ -19,7 +19,11 @@ nulldatamergeF <- bind_rows(nulldataF)
 
 # Summarise the results into a final null model: 
 ### Strictly we don't need to do a majority vote here, but we do want to summarise the results into one final model, for simplicity we therefore used the same function: 
+<<<<<<< Updated upstream
 nullmodelimpF <- majorityvote(nulldatamergeF, impN=10, freq=0.5)  
+=======
+nullmodelimpF <- majorityvote(nulldatamergeF, impN=length(Final_impF), freq=0.5)  
+>>>>>>> Stashed changes
 
 # Create new datasets, including the predicted value of the final model, and the predicted values of the null models: 
 completeF <- predcalcnull(impsetspredF, nullmodelimpF) 
@@ -64,16 +68,32 @@ calibrationplot <- plot_smooth_calibration(x_coordinates=smooth_info$x_coordinat
 finalmodelF
 
 # For the ROC we can calculate the predicted values manually as follows: 
+<<<<<<< Updated upstream
 Myimp$lpF <- -2.72780665 + 0.04244476*Myimp$age + 0.47924375*as.numeric(Myimp$comorb_hypertension) + 
    -0.41179816*as.numeric(Myimp$comorb_dm) + -0.45425622*as.numeric(Myimp$transhiatal) + 
   0.65301430*as.numeric(Myimp$open) + 0.40846314*as.numeric(Myimp$dummy_Neotx3)
+=======
+model_coefs <- with(finalmodelF, setNames(Meancoef, variable))
+# to numberic: 
+Myimp <- Myimp %>% mutate_if(is.factor, as.numeric)
+>>>>>>> Stashed changes
 
+#multiply all model coefficients with their respective variable value, not using the intercept variable (-1)
+Myimp <- Myimp %>% mutate(lpF = model_coefs["(Intercept)"] + rowSums(across(all_of(names(model_coefs)[-1]),
+                                                                                               ~ get(cur_column()) * model_coefs[cur_column()]))) 
+
+#paste this value to the imputed dataset as predicted value 
 Myimp$predF <- 1/(1+exp(-Myimp$lpF))
+<<<<<<< Updated upstream
 summary(Myimp$predF)
 
 myROC <- roc(Myimp$outcome ~ Myimp$lpF, levels=c(0,1))
 plot(myROC, xlim=c(1,0)) 
 auc(myROC)
+=======
+
+if(MIb.verbose) cat("\nA summary of ...:\n");print(summary(Myimp$predF))
+>>>>>>> Stashed changes
 
 
 
