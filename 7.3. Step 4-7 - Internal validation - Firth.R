@@ -83,8 +83,7 @@ colnames(IPAse2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 IPApoint <- performancelongF %>% filter(performanceM=="IPA")
-## >>>> See before: hard code 10?
-SEIPA <- sqrt(rubins_rules_var(estimates=IPApoint$performanceimp, ses=IPAse2$se, n_imputed_sets=10))
+SEIPA <- sqrt(rubins_rules_var(estimates=IPApoint$performanceimp, ses=IPAse2$se, n_imputed_sets=length(Final_impF)))
 
 ### Calculate the confidence intervals
 IPAupperF <- finalperformanceF$Meanperformance[finalperformanceF$performanceM=="IPA"] + 1.96*SEIPA
@@ -104,8 +103,7 @@ colnames(OEse2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 OEpoint <- performancelongF %>% filter(performanceM=="OE")
-## >>>> See before: hard code 10?
-SEOE <- sqrt(rubins_rules_var(estimates=OEpoint$performanceimp, ses=OEse2$se, n_imputed_sets=10))
+SEOE <- sqrt(rubins_rules_var(estimates=OEpoint$performanceimp, ses=OEse2$se, n_imputed_sets=length(Final_impF)))
 
 ### Calculate the confidence intervals
 OEupperF <- finalperformanceF$Meanperformance[finalperformanceF$performanceM=="OE"] + 1.96*SEOE
@@ -125,8 +123,7 @@ colnames(Brierse2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 Brierpoint <- performancelongF %>% filter(performanceM=="Brier")
-## >>>> See before: hard code 10?
-SEBrier <- sqrt(rubins_rules_var(estimates=Brierpoint$performanceimp, ses=Brierse2$se, n_imputed_sets=10))
+SEBrier <- sqrt(rubins_rules_var(estimates=Brierpoint$performanceimp, ses=Brierse2$se, n_imputed_sets=length(Final_impF)))
 
 ### Calculate the confidence intervals
 BrierupperF <- finalperformanceF$Meanperformance[finalperformanceF$performanceM=="Brier"] + 1.96*SEBrier
@@ -146,8 +143,7 @@ colnames(BrierRse2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 BrierRpoint <- performancelongF %>% filter(performanceM=="BrierR")
-## >>>> See before: hard code 10?
-SEBrierR <- sqrt(rubins_rules_var(estimates=BrierRpoint$performanceimp, ses=BrierRse2$se, n_imputed_sets=10))
+SEBrierR <- sqrt(rubins_rules_var(estimates=BrierRpoint$performanceimp, ses=BrierRse2$se, n_imputed_sets=length(Final_impF)))
 
 ### Calculate the confidence intervals
 BrierRupperF <- finalperformanceF$Meanperformance[finalperformanceF$performanceM=="BrierR"] + 1.96*SEBrierR
@@ -166,8 +162,7 @@ colnames(Ise2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 Ipoint <- performancelongF %>% filter(performanceM=="Intercept")
-## >>>> See before: hard code 10?
-SEI <- sqrt(rubins_rules_var(estimates=Ipoint$performanceimp, ses=Ise2$se, n_imputed_sets=10))
+SEI <- sqrt(rubins_rules_var(estimates=Ipoint$performanceimp, ses=Ise2$se, n_imputed_sets=length(Final_impF)))
 
 ### Calculate the confidence intervals
 IupperF <- finalperformanceF$Meanperformance[finalperformanceF$performanceM=="Intercept"] + 1.96*SEI
@@ -187,8 +182,7 @@ colnames(Slopese2)[1] <- "se"
 
 ### Get between imputation set standard errors: 
 Slopepoint <- performancelongF %>% filter(performanceM=="Slope")
-## >>>> See before: hard code 10?
-SESlope <- sqrt(rubins_rules_var(estimates=Slopepoint$performanceimp, ses=Slopese2$se, n_imputed_sets=10))
+SESlope <- sqrt(rubins_rules_var(estimates=Slopepoint$performanceimp, ses=Slopese2$se, n_imputed_sets=length(Final_impF)))
 
 ### Calculate the confidence intervals
 SlopeupperF <- finalperformanceF$Meanperformance[finalperformanceF$performanceM=="Slope"] + 1.96*SESlope
@@ -242,7 +236,6 @@ upperO <- c(AUCupperF,
             BrierupperF, 
             BrierRupperF, 
             IPAupperF)
-## >>>> this bootstrap was overwriting the function
 bootstrp <- c(mean_performanceF$bootstrap[mean_performanceF$performanceM=="logitauc"], 
                mean_performanceF$bootstrap[mean_performanceF$performanceM=="OE"], 
                mean_performanceF$bootstrap[mean_performanceF$performanceM=="Intercept"], 
