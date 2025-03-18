@@ -29,8 +29,7 @@ modeldata <- extractmodelsF(modelsF)
 modeldatamerged <- bind_rows(modeldata)
 
 #select the final model variables and coefficients using the majority vote: 
-## >>>> impN = 10 is hard coded, should it be length(Final_impF)?
-finalmodelF <- majorityvote(modeldatamerged, impN=10, freq=0.5)
+finalmodelF <- majorityvote(modeldatamerged, impN=length(Final_impF), freq=0.5)
 
 #refit the models over all imputed datasets i with these selected variables: 
 variablesrefit <- setdiff(finalmodelF$variable, "(Intercept)")
@@ -47,7 +46,7 @@ modeldatarefitmerged <- bind_rows(modeldatarefit)
 finalmodelrefit <- modeldatarefitmerged %>% group_by(variable) %>% summarise(Meancoef=mean(modeli.coefficients))
 
 #calculate the variance of the coefficients using Rubin's Rules (see 2. Function library)
-varsrefit <- modeldatarefitmerged %>% group_by(variable) %>% summarise(rubins_rules_var(estimates=modeli.coefficients, ses=se, n_imputed_sets=10)) %>% rename(var = "rubins_rules_var(estimates = modeli.coefficients, ses = se, n_imputed_sets = 10)")
+varsrefit <- modeldatarefitmerged %>% group_by(variable) %>% summarise(rubins_rules_var(estimates=modeli.coefficients, ses=se, n_imputed_sets=length(Final_impF))) %>% rename(var = "rubins_rules_var(estimates = modeli.coefficients, ses = se, n_imputed_sets = length(Final_impF))")
 
 #merge these vars with the final model
 finalmodelrefit <- merge(finalmodelrefit, varsrefit, by="variable", all.x=TRUE)
@@ -74,7 +73,7 @@ modeldatarefitmerged2 <- bind_rows(modeldatarefit2)
 finalmodelrefit2 <- modeldatarefitmerged2 %>% group_by(variable) %>% summarise(Meancoef=mean(modeli.coefficients))
 finalmodelrefit2$OR <- exp(finalmodelrefit2$Meancoef) #add odds ratio
 
-varsrefit2 <- modeldatarefitmerged2 %>% group_by(variable) %>% summarise(rubins_rules_var(estimates=modeli.coefficients, ses=se, n_imputed_sets=10)) %>% rename(var = "rubins_rules_var(estimates = modeli.coefficients, ses = se, n_imputed_sets = 10)")
+varsrefit2 <- modeldatarefitmerged2 %>% group_by(variable) %>% summarise(rubins_rules_var(estimates=modeli.coefficients, ses=se, n_imputed_sets=length(Final_impF))) %>% rename(var = "rubins_rules_var(estimates = modeli.coefficients, ses = se, n_imputed_sets = 10)")
 
 #merge these vars with the final model
 finalmodelrefit2 <- merge(finalmodelrefit2, varsrefit2, by="variable", all.x=TRUE)

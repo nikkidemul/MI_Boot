@@ -19,8 +19,7 @@ nulldatamergeF <- bind_rows(nulldataF)
 
 # Summarise the results into a final null model: 
 ### Strictly we don't need to do a majority vote here, but we do want to summarise the results into one final model, for simplicity we therefore used the same function: 
-## >>>> Same about impN as in script 5
-nullmodelimpF <- majorityvote(nulldatamergeF, impN=10, freq=0.5)  
+nullmodelimpF <- majorityvote(nulldatamergeF, impN=length(Final_impF), freq=0.5)  
 
 # Create new datasets, including the predicted value of the final model, and the predicted values of the null models: 
 completeF <- predcalcnull(impsetspredF, nullmodelimpF) 
@@ -47,7 +46,7 @@ finalperformanceF$performanceM <- ifelse(finalperformanceF$performanceM=="logita
 
 # Then, we also have to pool the standard errors of the logit AUC.
 # We save this calculated variance of the logit AUC to later calculate the confidence intervals surrounding the AUC (for both apparent and adjusted performance). 
-total_var_performance_impF <- rubins_rules_var_auc(estimates=performancelongF$performanceimp[performancelongF$performanceM=="logitauc"], ses=performancelongF$performanceimp[performancelongF$performanceM=="logit_se"], n_imputed_sets=10) #is opgeslagen als totale variantie. 
+total_var_performance_impF <- rubins_rules_var_auc(estimates=performancelongF$performanceimp[performancelongF$performanceM=="logitauc"], ses=performancelongF$performanceimp[performancelongF$performanceM=="logit_se"], n_imputed_sets=length(Final_impF))  
 
 if(MIb.intrnl.verbose) total_var_performance_impF #0.01037926
 
@@ -65,13 +64,17 @@ calibrationplot <- plot_smooth_calibration(x_coordinates=smooth_info$x_coordinat
 if(MIb.intrnl.verbose) print(finalmodelF)
 
 # For the ROC we can calculate the predicted values manually as follows: 
-## >>>> This is dangerous ground :) can you refer to a beta vector somewhere?
-Myimp$lpF <- -2.72780665 + 0.04244476*Myimp$age + 0.47924375*as.numeric(Myimp$comorb_hypertension) + 
-   -0.41179816*as.numeric(Myimp$comorb_dm) + -0.45425622*as.numeric(Myimp$transhiatal) + 
-  0.65301430*as.numeric(Myimp$open) + 0.40846314*as.numeric(Myimp$dummy_Neotx3)
+model_coefs <- with(finalmodelF, setNames(Meancoef, variable))
+# to numeric: 
+Myimp <- Myimp %>% mutate_if(is.factor, as.numeric)
 
+#multiply all model coefficients with their respective variable value, not using the intercept variable (-1)
+Myimp <- Myimp %>% mutate(lpF = model_coefs["(Intercept)"] + rowSums(across(all_of(names(model_coefs)[-1]),
+                                                                            ~ get(cur_column()) * model_coefs[cur_column()]))) 
+
+#paste this value to the imputed dataset as predicted value 
 Myimp$predF <- 1/(1+exp(-Myimp$lpF))
-## >>>> What is this a summary of?
+
 if(MIb.verbose) cat("\nA summary of ...:\n");print(summary(Myimp$predF))
 
 if(MIb.verbose){
